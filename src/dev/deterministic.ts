@@ -10,7 +10,8 @@
  * With no injected config this module is inert and the app behaves normally.
  */
 
-import type { GameOptions, GameSession } from '../../game/three-game.js';
+import type { GameOptions } from '../../game/three-game.js';
+import type { GameSession } from '../../game/game-session.js';
 
 export interface DeterministicStep {
     /** 1-based frame index at which the key event is dispatched. */
