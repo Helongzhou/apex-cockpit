@@ -3,9 +3,9 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-
-const CAR_MODEL_URL = 'game/models/car.glb';
-const DRACO_DECODER_PATH = 'https://cdn.jsdelivr.net/npm/three@0.185.1/examples/jsm/libs/draco/';
+// The bundler emits the model and hands back its final URL; a plain relative string
+// would not be copied into dist/.
+import CAR_MODEL_URL from './models/car.glb?url';
 
 // Half-track the physics rig is tuned for; the model is scaled uniformly so its wheels span it.
 // Matching the track (not the wheelbase) keeps the original roll-over resistance.
@@ -91,7 +91,10 @@ async function loadAndPrepare() {
 }
 
 function createLoader() {
-    const draco = new DRACOLoader().setDecoderPath(DRACO_DECODER_PATH);
+    // three ships the Draco decoder next to DRACOLoader and resolves it with
+    // `new URL(..., import.meta.url)`, so the bundler emits it as a local asset.
+    // Do NOT call setDecoderPath(): that would replace those local URLs with a CDN path.
+    const draco = new DRACOLoader();
     const loader = new GLTFLoader();
     loader.setDRACOLoader(draco);
     return loader;
