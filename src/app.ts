@@ -1,17 +1,19 @@
 /**
  * app.ts - Wires the framework-agnostic store to the game layer.
  *
- * This replaces what `vue-app.js` used to do: hold the HUD state, expose it to the
- * UI, and provide `resetGame()` that clears the HUD fields before rebuilding the
- * session. The initial values and the reset order mirror `vue-app.js` exactly.
+ * This replaces what `vue-app.js` used to do: hold the HUD state, expose it to the UI, and
+ * provide the two game commands the UI can trigger (`resetGame`, `toggleView`). The initial
+ * values and the reset order mirror `vue-app.js` exactly.
  */
 
-import { resetGame } from '../game/three-game.js';
+import { resetGame, toggleView } from '../game/three-game.js';
 import type { GameHost } from '../game/types.js';
 import { createStore, type Store } from './state';
 
 const KNOCKABLE_BOX_COUNT = 5;
 const NO_DIRECTION = '—';
+
+const emptyBoxes = () => Array.from({ length: KNOCKABLE_BOX_COUNT }, () => ({ knocked: false }));
 
 /** Same shape and initial values as `vue-app.js` `data()`. */
 export function createInitialGameState(): GameHost {
@@ -28,8 +30,9 @@ export function createInitialGameState(): GameHost {
         isRacing: false,
         isTouchDevice: false,
         touchControls: { forward: false, backward: false, left: false, right: false, brake: false, jump: false },
-        boxesStatus: Array.from({ length: KNOCKABLE_BOX_COUNT }, () => ({ knocked: false })),
+        boxesStatus: emptyBoxes(),
         resetGame: () => undefined,
+        toggleView: () => undefined,
     };
 }
 
@@ -44,7 +47,7 @@ function resetHostFields(host: GameHost): void {
     host.maxSpeed = 0;
     host.raceTime = 0;
     host.isRacing = false;
-    host.boxesStatus = Array.from({ length: KNOCKABLE_BOX_COUNT }, () => ({ knocked: false }));
+    host.boxesStatus = emptyBoxes();
 }
 
 export interface GameHostRef {
@@ -63,6 +66,9 @@ export function createGameHost(): GameHostRef {
         void resetGame(host).catch((error: unknown) => {
             console.error('❌ Game reset failed:', error);
         });
+    };
+    host.toggleView = () => {
+        toggleView();
     };
 
     return { store, host };

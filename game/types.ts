@@ -49,4 +49,6 @@ export interface GameHost {
     boxesStatus: BoxStatus[];
     /** Clears the HUD fields and rebuilds the scene/physics world. */
     resetGame(): void;
+    /** Toggles between the follow camera and the cockpit view. */
+    toggleView(): void;
 }
