@@ -1,0 +1,2 @@
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "必跑命令与禁止模式（迁移后即受其约束）"}
+{"file": "docs/superpowers/specs/2026-10-15-codebase-analysis.md", "reason": "受影响模块清单与状态管理现状（§2 职责表、§5.5）"}

@@ -1,0 +1,31 @@
+{
+  "id": "iteration-1-baseline",
+  "name": "iteration-1-baseline",
+  "title": "Iteration 1 — TypeScript baseline, runtime stability, first bundle cut",
+  "description": "Iteration 1 of the Apex Cockpit redevelopment: move the app off CDN import maps onto a real Vite + TypeScript + React 19 toolchain, make the render loop and asset loading recoverable, take the first cut at the first-load payload, and back the whole thing with filled frontend specs and a seeded test suite. Parent owns the requirement set, the task map and the cross-child acceptance criteria; implementation happens in the four child tasks.",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P0",
+  "creator": "HelongZhou",
+  "assignee": "HelongZhou",
+  "createdAt": "2026-10-15",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "10-15-vite-ts-react-migration",
+    "10-15-runtime-recovery",
+    "10-15-bundle-budget",
+    "10-15-specs-and-tests"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

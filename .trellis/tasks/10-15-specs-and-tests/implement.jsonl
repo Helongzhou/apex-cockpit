@@ -1,0 +1,3 @@
+{"file": ".trellis/spec/frontend/index.md", "reason": "spec 层索引与填写要求"}
+{"file": "docs/superpowers/specs/2026-10-15-codebase-analysis.md", "reason": "模块职责表与可测函数线索（§2/§7）"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "类型规范的目标基线（本任务产出之一）"}

@@ -1,0 +1,5 @@
+{"file": "docs/superpowers/specs/2026-10-15-iteration-plan.md", "reason": "迭代 1 改动文件清单与验收（§5.1/§5.2）"}
+{"file": "docs/research/2026-10-15-external-facts.md", "reason": "载荷基线与本机工具链版本约束（§5/§7）"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "目标目录约定的承载文件（C4 回填，迁移须与其骨架一致）"}
+{"file": ".trellis/spec/frontend/type-safety.md", "reason": "strict / 禁 any / @types 版本对齐等类型约定的承载文件"}
+{"file": ".trellis/tasks/10-15-iteration-1-baseline/prd.md", "reason": "需求集与 AC1.1–AC1.6"}
