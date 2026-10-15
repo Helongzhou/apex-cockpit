@@ -1,4 +1,4 @@
-// rendering.js - WebGL renderer, selective glow post-processing and the car reflection probe
+// rendering.ts - WebGL renderer, selective glow post-processing and the car reflection probe
 import * as THREE from 'three';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
@@ -39,11 +39,13 @@ const MIX_FRAGMENT_SHADER = `
     }
 `;
 
+/** A material reference as it hangs off a mesh: single material or material array. */
+type MeshMaterial = THREE.Material | THREE.Material[];
+
 /**
- * @param {HTMLCanvasElement} canvas
- * @returns {THREE.WebGLRenderer}
+ * @param canvas
  */
-export function createRenderer(canvas) {
+export function createRenderer(canvas: HTMLCanvasElement): THREE.WebGLRenderer {
     // No multisampled canvas: the image arrives through the composer and FXAA smooths it, so a
     // multisampled default framebuffer would only be resolved for nothing on every frame
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
@@ -59,9 +61,8 @@ export function createRenderer(canvas) {
 
 /**
  * Renders the shadow map during the next render pass; call once at the start of every frame
- * @param {THREE.WebGLRenderer} renderer
  */
-export function requestShadowUpdate(renderer) {
+export function requestShadowUpdate(renderer: THREE.WebGLRenderer): void {
     renderer.shadowMap.needsUpdate = true;
 }
 
@@ -69,7 +70,14 @@ export function requestShadowUpdate(renderer) {
  * Glow layer replacement: blooms only the objects on the glow layer and adds the result to the normal render
  */
 export class GlowComposer {
-    constructor(renderer) {
+    renderPass: RenderPass;
+    darkMaterial: THREE.MeshBasicMaterial;
+    hiddenMaterials: Map<THREE.Mesh, MeshMaterial>;
+    dimmedMeshes: THREE.Mesh[] | null;
+    bloomComposer: EffectComposer;
+    finalComposer: EffectComposer;
+
+    constructor(renderer: THREE.WebGLRenderer) {
         const size = renderer.getDrawingBufferSize(new THREE.Vector2());
         const glowSize = size.clone().multiplyScalar(GLOW_RESOLUTION_SCALE).floor();
         this.renderPass = new RenderPass(new THREE.Scene(), new THREE.PerspectiveCamera());
@@ -99,18 +107,18 @@ export class GlowComposer {
         this.finalComposer.addPass(new FXAAPass());
     }
 
-    setScene(scene, camera) {
+    setScene(scene: THREE.Scene, camera: THREE.Camera): void {
         this.renderPass.scene = scene;
         this.renderPass.camera = camera;
         this.dimmedMeshes = null; // the next render rebuilds the list for the new scene
     }
 
-    setSize(width, height) {
+    setSize(width: number, height: number): void {
         this.bloomComposer.setSize(width * GLOW_RESOLUTION_SCALE, height * GLOW_RESOLUTION_SCALE);
         this.finalComposer.setSize(width, height);
     }
 
-    render() {
+    render(): void {
         const scene = this.renderPass.scene;
         if (!this.dimmedMeshes) {
             this.dimmedMeshes = collectNonGlowingMeshes(scene);
@@ -125,7 +133,7 @@ export class GlowComposer {
         }
         this.bloomComposer.render();
         for (const mesh of this.dimmedMeshes) {
-            mesh.material = this.hiddenMaterials.get(mesh);
+            mesh.material = this.hiddenMaterials.get(mesh) as MeshMaterial;
         }
         this.hiddenMaterials.clear();
         scene.background = background;
@@ -139,6 +147,12 @@ export class GlowComposer {
  * After the first full capture only one cube face is refreshed per frame, which keeps the cost flat.
  */
 export class ReflectionProbe {
+    renderTarget: THREE.WebGLCubeRenderTarget;
+    cubeCamera: THREE.CubeCamera;
+    carBody: THREE.Mesh | null;
+    nextFace: number;
+    hasFullCapture: boolean;
+
     constructor() {
         this.renderTarget = new THREE.WebGLCubeRenderTarget(REFLECTION_PROBE_SIZE, {
             type: THREE.HalfFloatType,
@@ -151,32 +165,35 @@ export class ReflectionProbe {
         this.hasFullCapture = false;
     }
 
-    attachToMesh(carBody) {
+    attachToMesh(carBody: THREE.Mesh): void {
         this.carBody = carBody;
-        carBody.material.envMap = this.renderTarget.texture;
-        carBody.material.envMapIntensity = REFLECTION_LEVEL;
-        carBody.material.needsUpdate = true;
+        const material = carBody.material as THREE.MeshStandardMaterial;
+        material.envMap = this.renderTarget.texture;
+        material.envMapIntensity = REFLECTION_LEVEL;
+        material.needsUpdate = true;
     }
 
-    update(renderer, scene) {
+    update(renderer: THREE.WebGLRenderer, scene: THREE.Scene): void {
         if (!this.carBody) {
             return;
         }
+        const material = this.carBody.material as THREE.Material;
         // The car must not reflect itself, but its lights should still illuminate the reflection
         this.cubeCamera.position.copy(this.carBody.position);
-        this.carBody.material.visible = false;
+        material.visible = false;
         if (this.hasFullCapture) {
             this.renderNextFace(renderer, scene);
         } else {
             this.cubeCamera.update(renderer, scene);
             this.hasFullCapture = true;
         }
-        this.carBody.material.visible = true;
+        material.visible = true;
     }
 
-    renderNextFace(renderer, scene) {
+    renderNextFace(renderer: THREE.WebGLRenderer, scene: THREE.Scene): void {
         this.cubeCamera.updateMatrixWorld();
-        const faceCamera = this.cubeCamera.children[this.nextFace];
+        // CubeCamera children are its six face cameras.
+        const faceCamera = this.cubeCamera.children[this.nextFace] as THREE.Camera;
         const isLastFace = this.nextFace === CUBE_FACES - 1;
         const previousTarget = renderer.getRenderTarget();
 
@@ -189,22 +206,23 @@ export class ReflectionProbe {
         this.nextFace = (this.nextFace + 1) % CUBE_FACES;
     }
 
-    dispose() {
+    dispose(): void {
         this.renderTarget.dispose();
     }
 }
 
 /** The meshes not on the glow layer, dimmed to black while the bloom is computed */
-function collectNonGlowingMeshes(scene) {
-    const meshes = [];
+function collectNonGlowingMeshes(scene: THREE.Scene): THREE.Mesh[] {
+    const meshes: THREE.Mesh[] = [];
     scene.traverse(object => {
-        if (object.isMesh && !object.layers.isEnabled(GLOW_LAYER)) {
-            meshes.push(object);
+        const mesh = object as THREE.Mesh;
+        if (mesh.isMesh && !mesh.layers.isEnabled(GLOW_LAYER)) {
+            meshes.push(mesh);
         }
     });
     return meshes;
 }
 
-function createHdrTarget(size, samples) {
+function createHdrTarget(size: THREE.Vector2, samples: number): THREE.WebGLRenderTarget {
     return new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples });
 }

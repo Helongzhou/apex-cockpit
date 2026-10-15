@@ -1,4 +1,4 @@
-// world.js - Static studio environment: track, walls, towers, bridge and the knockable boxes
+// world.ts - Static studio environment: track, walls, towers, bridge and the knockable boxes
 import * as THREE from 'three';
 import { RAPIER, COLLISION_GROUPS, syncMeshWithBody } from './physics-world.js';
 import { GLOW_LAYER } from './rendering.js';
@@ -8,8 +8,8 @@ import { babylonColor } from './color.js';
 // so the layout looks identical on screen.
 const GROUND_LEVEL = -20;
 const GROUND_THICKNESS = 2;
-const TRACK = { size: 800, friction: 2, color: [0.4, 0.4, 0.4], specular: [0.1, 0.1, 0.1] };
-const WALL = { height: 20, thickness: 2, friction: 0.1, color: [0.95, 0.95, 0.95], specular: [0.1, 0.1, 0.1] };
+const TRACK = { size: 800, friction: 2, color: [0.4, 0.4, 0.4], specular: [0.1, 0.1, 0.1] } as const;
+const WALL = { height: 20, thickness: 2, friction: 0.1, color: [0.95, 0.95, 0.95], specular: [0.1, 0.1, 0.1] } as const;
 const TOWER = {
     size: { width: 15, height: 25, depth: 15 },
     friction: 0.5,
@@ -24,7 +24,7 @@ const TOWER = {
         { x: -300, z: 0 },
         { x: 0, z: -300 }
     ]
-};
+} as const;
 const KNOCKABLE_BOX = {
     size: 8,
     mass: 20,
@@ -39,7 +39,7 @@ const KNOCKABLE_BOX = {
         { x: 200, z: -250 },
         { x: -300, z: 0 }
     ]
-};
+} as const;
 const BRIDGE = {
     centerX: -55,
     z: 0,
@@ -59,13 +59,52 @@ const BRIDGE = {
             { x: 30, z: 10 }
         ]
     }
-};
+} as const;
+
+interface Size3 {
+    width: number;
+    height: number;
+    depth: number;
+}
+
+interface Position3 {
+    x: number;
+    y: number;
+    z: number;
+}
+
+interface StaticBoxSpec {
+    name: string;
+    size: Size3;
+    position: Position3;
+    material: THREE.Material;
+    friction: number;
+}
+
+interface WallSpec {
+    name: string;
+    size: Size3;
+    position: Position3;
+}
+
+export interface Environment {
+    boxes: KnockableBox[];
+    syncMeshes(): void;
+    resetBoxes(): void;
+}
 
 /**
  * Orange physics box that counts as "knocked" once it moved away from its settled position
  */
 export class KnockableBox {
-    constructor(mesh, body, index) {
+    mesh: THREE.Mesh;
+    body: RAPIER.RigidBody;
+    index: number;
+    originalPosition: THREE.Vector3;
+    originalRotation: THREE.Quaternion;
+    settledPosition: THREE.Vector3 | null;
+
+    constructor(mesh: THREE.Mesh, body: RAPIER.RigidBody, index: number) {
         this.mesh = mesh;
         this.body = body;
         this.index = index;
@@ -74,24 +113,25 @@ export class KnockableBox {
         this.settledPosition = null;
     }
 
-    get name() {
+    get name(): string {
         return this.mesh.name;
     }
 
-    get isSettled() {
+    get isSettled(): boolean {
         return this.settledPosition !== null;
     }
 
     /** Remembers the current position as the reference for movement detection */
-    settle() {
+    settle(): void {
         this.settledPosition = this.mesh.position.clone();
     }
 
-    distanceFromSettledPosition() {
-        return this.mesh.position.distanceTo(this.settledPosition);
+    distanceFromSettledPosition(): number {
+        // Callers only reach this while `isSettled` is true (see Telemetry.detectKnockedBoxes).
+        return this.mesh.position.distanceTo(this.settledPosition as THREE.Vector3);
     }
 
-    reset() {
+    reset(): void {
         this.settledPosition = null;
         this.body.setTranslation(this.originalPosition, true);
         this.body.setRotation(this.originalRotation, true);
@@ -100,16 +140,15 @@ export class KnockableBox {
         this.sync();
     }
 
-    sync() {
+    sync(): void {
         syncMeshWithBody(this.mesh, this.body);
     }
 }
 
 /**
  * Creates the whole studio environment
- * @returns {{ boxes: KnockableBox[], syncMeshes: () => void, resetBoxes: () => void }}
  */
-export function createEnvironment(scene, world) {
+export function createEnvironment(scene: THREE.Scene, world: RAPIER.World): Environment {
     createSquareRaceTrack(scene, world);
     createTrackWalls(scene, world);
     createCollisionTowers(scene, world);
@@ -127,7 +166,7 @@ export function createEnvironment(scene, world) {
     };
 }
 
-function createSquareRaceTrack(scene, world) {
+function createSquareRaceTrack(scene: THREE.Scene, world: RAPIER.World): void {
     const geometry = new THREE.PlaneGeometry(TRACK.size, TRACK.size);
     geometry.rotateX(-Math.PI / 2);
     const track = new THREE.Mesh(geometry, createStudioMaterial(TRACK.color, TRACK.specular));
@@ -143,7 +182,7 @@ function createSquareRaceTrack(scene, world) {
     world.createCollider(collider, body);
 }
 
-function createTrackWalls(scene, world) {
+function createTrackWalls(scene: THREE.Scene, world: RAPIER.World): void {
     const material = createStudioMaterial(WALL.color, WALL.specular);
     const { height, thickness } = WALL;
     const half = TRACK.size / 2;
@@ -151,7 +190,7 @@ function createTrackWalls(scene, world) {
     const alongX = { width: TRACK.size + thickness * 2, height, depth: thickness };
     const alongZ = { width: thickness, height, depth: TRACK.size };
 
-    const walls = [
+    const walls: WallSpec[] = [
         { name: 'northWall', size: alongX, position: { x: 0, y: centerY, z: half + thickness / 2 } },
         { name: 'southWall', size: alongX, position: { x: 0, y: centerY, z: -half - thickness / 2 } },
         { name: 'eastWall', size: alongZ, position: { x: half + thickness / 2, y: centerY, z: 0 } },
@@ -160,7 +199,7 @@ function createTrackWalls(scene, world) {
     walls.forEach(wall => createStaticBox(scene, world, { ...wall, material, friction: WALL.friction }));
 }
 
-function createCollisionTowers(scene, world) {
+function createCollisionTowers(scene: THREE.Scene, world: RAPIER.World): void {
     const material = new THREE.MeshPhongMaterial({ color: babylonColor(...TOWER.color) });
     TOWER.positions.forEach((position, index) => {
         createStaticBox(scene, world, {
@@ -173,7 +212,7 @@ function createCollisionTowers(scene, world) {
     });
 }
 
-function createBridge(scene, world) {
+function createBridge(scene: THREE.Scene, world: RAPIER.World): void {
     const material = createStudioMaterial(BRIDGE.color, BRIDGE.specular);
     const { platform, pillar } = BRIDGE;
 
@@ -200,7 +239,7 @@ function createBridge(scene, world) {
     console.log(`🌉 Bridge created at X=${BRIDGE.centerX} with ${pillar.offsets.length} pillars`);
 }
 
-function createKnockableBoxes(scene, world) {
+function createKnockableBoxes(scene: THREE.Scene, world: RAPIER.World): KnockableBox[] {
     const { size, mass, friction, restitution } = KNOCKABLE_BOX;
     const geometry = new THREE.BoxGeometry(size, size, size);
     const material = new THREE.MeshPhongMaterial({
@@ -232,7 +271,7 @@ function createKnockableBoxes(scene, world) {
     return boxes;
 }
 
-function createStaticBox(scene, world, { name, size, position, material, friction }) {
+function createStaticBox(scene: THREE.Scene, world: RAPIER.World, { name, size, position, material, friction }: StaticBoxSpec): THREE.Mesh {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(size.width, size.height, size.depth), material);
     mesh.name = name;
     mesh.position.set(position.x, position.y, position.z);
@@ -247,6 +286,6 @@ function createStaticBox(scene, world, { name, size, position, material, frictio
     return mesh;
 }
 
-function createStudioMaterial(color, specular) {
+function createStudioMaterial(color: readonly [number, number, number], specular: readonly [number, number, number]): THREE.MeshPhongMaterial {
     return new THREE.MeshPhongMaterial({ color: babylonColor(...color), specular: babylonColor(...specular) });
 }

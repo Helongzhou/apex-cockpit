@@ -1,4 +1,4 @@
-// car-model.js - Loads the hand-made Ford Anglia model once and splits it into the parts the game drives
+// car-model.ts - Loads the hand-made Ford Anglia model once and splits it into the parts the game drives
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
@@ -28,24 +28,81 @@ const PART_NAMES = {
     headlights: ['Plane.021'],
     taillights: ['Plane.041', 'Plane.042', 'Plane.043'],
     glass: ['Plane.001', 'Plane.029', 'Plane.023']
-};
+} as const;
 
-const WHEEL_CORNERS = { front: ['frontLeft', 'frontRight'], rear: ['rearLeft', 'rearRight'] };
+const WHEEL_CORNERS = {
+    front: ['frontLeft', 'frontRight'],
+    rear: ['rearLeft', 'rearRight']
+} as const;
 
-let modelPromise = null;
+/** The parts the model is split into. Everything unlisted ends up in `body`. */
+export interface MeshBuckets {
+    body: THREE.Mesh[];
+    frontWheels: THREE.Mesh[];
+    rearWheels: THREE.Mesh[];
+    steeringWheel: THREE.Mesh[];
+    gasPedal: THREE.Mesh[];
+    brakePedal: THREE.Mesh[];
+    shifter: THREE.Mesh[];
+    headlights: THREE.Mesh[];
+    taillights: THREE.Mesh[];
+    glass: THREE.Mesh[];
+}
+
+type PartKey = Exclude<keyof MeshBuckets, 'body'>;
+
+export interface WheelPart {
+    corner: string;
+    geometry: THREE.BufferGeometry;
+    position: THREE.Vector3;
+    radius: number;
+}
+
+/** A part recentred on its pivot, with the orientation the pivot node re-applies. */
+export interface PivotPart {
+    geometry: THREE.BufferGeometry;
+    pivot: THREE.Vector3;
+    orientation: THREE.Quaternion;
+}
+
+export interface SteeringWheelPart {
+    geometry: THREE.BufferGeometry;
+    pivot: THREE.Vector3;
+    axis: THREE.Vector3;
+    armGeometry: THREE.BufferGeometry | null;
+}
+
+export interface CarModelData {
+    bodyGeometry: THREE.BufferGeometry;
+    bodyMaterial: THREE.MeshStandardMaterial;
+    hullPoints: Float32Array;
+    size: THREE.Vector3;
+    wheels: WheelPart[];
+    wheelRadius: number;
+    halfWheelbase: number;
+    halfTrack: number;
+    steeringWheel: SteeringWheelPart;
+    gasPedal: PivotPart;
+    brakePedal: PivotPart;
+    shifter: PivotPart;
+    headlightGeometry: THREE.BufferGeometry;
+    taillightGeometry: THREE.BufferGeometry;
+    glassGeometry: THREE.BufferGeometry | null;
+}
+
+let modelPromise: Promise<CarModelData> | null = null;
 
 /**
  * Loads and prepares the car model exactly once, later calls reuse the cached parts.
- * @returns {Promise<CarModelData>}
  */
-export function loadCarModel() {
+export function loadCarModel(): Promise<CarModelData> {
     if (!modelPromise) {
         modelPromise = loadAndPrepare();
     }
     return modelPromise;
 }
 
-async function loadAndPrepare() {
+async function loadAndPrepare(): Promise<CarModelData> {
     console.log('🚗 Loading Ford Anglia car model...');
     const gltf = await createLoader().loadAsync(CAR_MODEL_URL);
     const root = gltf.scene;
@@ -75,7 +132,8 @@ async function loadAndPrepare() {
         bodyGeometry,
         bodyMaterial: material,
         hullPoints: extractPoints(bodyGeometry),
-        size: bodyGeometry.boundingBox.getSize(new THREE.Vector3()),
+        // computeBoundingBox() above always fills the box in.
+        size: (bodyGeometry.boundingBox as THREE.Box3).getSize(new THREE.Vector3()),
         wheels,
         wheelRadius: wheels[0].radius,
         halfWheelbase: Math.abs(wheels[0].position.z),
@@ -90,7 +148,7 @@ async function loadAndPrepare() {
     };
 }
 
-function createLoader() {
+function createLoader(): GLTFLoader {
     // three ships the Draco decoder next to DRACOLoader and resolves it with
     // `new URL(..., import.meta.url)`, so the bundler emits it as a local asset.
     // Do NOT call setDecoderPath(): that would replace those local URLs with a CDN path.
@@ -100,23 +158,25 @@ function createLoader() {
     return loader;
 }
 
-/** Buckets every mesh of the model into its game part by node name (loaders may drop the dots). */
 /** GLTFLoader strips the dots from node names, so both sides are compared without them */
-function normalizeNodeName(name) {
+function normalizeNodeName(name: string): string {
     return name.replace(/\./g, '');
 }
 
-function classifyMeshes(root) {
-    const lookup = new Map();
+function classifyMeshes(root: THREE.Object3D): MeshBuckets {
+    const lookup = new Map<string, PartKey>();
     for (const [part, names] of Object.entries(PART_NAMES)) {
         for (const name of names) {
-            lookup.set(normalizeNodeName(name), part);
+            lookup.set(normalizeNodeName(name), part as PartKey);
         }
     }
-    const buckets = { body: [], frontWheels: [], rearWheels: [], steeringWheel: [], gasPedal: [], brakePedal: [], shifter: [], headlights: [], taillights: [], glass: [] };
+    const buckets: MeshBuckets = {
+        body: [], frontWheels: [], rearWheels: [], steeringWheel: [], gasPedal: [],
+        brakePedal: [], shifter: [], headlights: [], taillights: [], glass: []
+    };
     root.traverse(object => {
-        if (object.isMesh) {
-            buckets[lookup.get(normalizeNodeName(object.name)) ?? 'body'].push(object);
+        if ((object as THREE.Mesh).isMesh) {
+            buckets[lookup.get(normalizeNodeName(object.name)) ?? 'body'].push(object as THREE.Mesh);
         }
     });
     if (buckets.frontWheels.length === 0 || buckets.rearWheels.length === 0) {
@@ -125,14 +185,15 @@ function classifyMeshes(root) {
     return buckets;
 }
 
-function pickMaterial(meshes) {
-    return (meshes.body[0] ?? meshes.frontWheels[0]).material;
+function pickMaterial(meshes: MeshBuckets): THREE.MeshStandardMaterial {
+    // The GLB carries a single PBR material; car-lights and world materials are created separately.
+    return (meshes.body[0] ?? meshes.frontWheels[0]).material as THREE.MeshStandardMaterial;
 }
 
 /**
  * Uniform scale + centering so the wheelbase is centred on Z and the axles sit at y = 0.
  */
-function computeBakeMatrix(frontWheels, rearWheels, scale) {
+function computeBakeMatrix(frontWheels: THREE.Mesh[], rearWheels: THREE.Mesh[], scale: number): THREE.Matrix4 {
     const front = worldBox(frontWheels).getCenter(new THREE.Vector3());
     const rear = worldBox(rearWheels).getCenter(new THREE.Vector3());
     const midZ = (front.z + rear.z) / 2;
@@ -144,16 +205,19 @@ function computeBakeMatrix(frontWheels, rearWheels, scale) {
 }
 
 /** Merges meshes into one geometry, each baked with its own world matrix and the shared bake transform. */
-function mergeBaked(meshes, bake) {
+function mergeBaked(meshes: THREE.Mesh[], bake: THREE.Matrix4): THREE.BufferGeometry {
     const geometries = meshes.map(mesh => mesh.geometry.clone().applyMatrix4(mesh.matrixWorld).applyMatrix4(bake));
     return mergeGeometries(geometries, false);
 }
 
 /**
  * Splits a wheel-pair mesh into its left (+X) and right (-X) wheel, each recentred on its own hub.
- * @returns {{corner: string, geometry: THREE.BufferGeometry, position: THREE.Vector3, radius: number}[]}
  */
-function splitWheelPair(wheelMeshes, bake, [leftCorner, rightCorner]) {
+function splitWheelPair(
+    wheelMeshes: THREE.Mesh[],
+    bake: THREE.Matrix4,
+    [leftCorner, rightCorner]: readonly [string, string]
+): WheelPart[] {
     const pair = mergeBaked(wheelMeshes, bake).toNonIndexed();
     return [
         finishWheel(filterTriangles(pair, cx => cx > 0), leftCorner),
@@ -161,18 +225,22 @@ function splitWheelPair(wheelMeshes, bake, [leftCorner, rightCorner]) {
     ];
 }
 
-function finishWheel(geometry, corner) {
+function finishWheel(geometry: THREE.BufferGeometry, corner: string): WheelPart {
     geometry.computeBoundingBox();
-    const position = geometry.boundingBox.getCenter(new THREE.Vector3());
-    const size = geometry.boundingBox.getSize(new THREE.Vector3());
+    const box = geometry.boundingBox as THREE.Box3;
+    const position = box.getCenter(new THREE.Vector3());
+    const size = box.getSize(new THREE.Vector3());
     geometry.translate(-position.x, -position.y, -position.z);
     return { corner, geometry: markShared(geometry), position, radius: Math.max(size.y, size.z) / 2 };
 }
 
 /** Keeps the triangles whose centroid (cx, cy, cz) passes the predicate, as a fresh non-indexed geometry. */
-function filterTriangles(geometry, keep) {
+function filterTriangles(
+    geometry: THREE.BufferGeometry,
+    keep: (cx: number, cy: number, cz: number) => boolean
+): THREE.BufferGeometry {
     const src = geometry.attributes;
-    const out = { position: [], normal: [], uv: [] };
+    const out: { position: number[]; normal: number[]; uv: number[] } = { position: [], normal: [], uv: [] };
     const pos = src.position;
     for (let t = 0; t < pos.count; t += 3) {
         const cx = (pos.getX(t) + pos.getX(t + 1) + pos.getX(t + 2)) / 3;
@@ -202,13 +270,7 @@ function filterTriangles(geometry, keep) {
     return result;
 }
 
-/**
- * @typedef {Object} PivotPart
- * @property {THREE.BufferGeometry} geometry - recentred on its pivot, orientation stripped
- * @property {THREE.Vector3} pivot - pivot position in car-frame coordinates
- * @property {THREE.Quaternion} orientation - world orientation the pivot node re-applies
- */
-function buildSteeringWheel(meshes, bake) {
+function buildSteeringWheel(meshes: THREE.Mesh[], bake: THREE.Matrix4): SteeringWheelPart {
     const ring = meshes.find(mesh => mesh.name.startsWith('Torus')) ?? meshes[0];
     // The steering column axis is the ring's hole axis (its local Y), carried into car-frame coordinates
     const axis = new THREE.Vector3(0, 1, 0).applyQuaternion(ring.getWorldQuaternion(new THREE.Quaternion())).normalize();
@@ -217,18 +279,20 @@ function buildSteeringWheel(meshes, bake) {
     // The bake is a uniform scale plus translations, so the centre maps straight into car-frame coordinates.
     const ringWorld = ring.geometry.clone().applyMatrix4(ring.matrixWorld);
     ringWorld.computeBoundingBox();
-    const center = ringWorld.boundingBox.getCenter(new THREE.Vector3());
+    const center = (ringWorld.boundingBox as THREE.Box3).getCenter(new THREE.Vector3());
     const pivot = center.clone().applyMatrix4(bake);
 
     // The hub mesh bundles the spinning hub + spokes with a fixed arm reaching the dashboard.
     // Split it by distance from the ring plane along the column axis: the near part spins, the arm stays.
     const column = meshes.find(mesh => normalizeNodeName(mesh.name).startsWith(normalizeNodeName(STEERING_COLUMN_NODE)));
-    const axialOf = (x, y, z) => (x - center.x) * axis.x + (y - center.y) * axis.y + (z - center.z) * axis.z;
+    const axialOf = (x: number, y: number, z: number): number =>
+        (x - center.x) * axis.x + (y - center.y) * axis.y + (z - center.z) * axis.z;
     // Re-extracting with an always-true predicate gives every part the same attribute layout for mergeGeometries
-    const bakeAndNormalize = geometry => filterTriangles(geometry.applyMatrix4(bake), () => true);
+    const bakeAndNormalize = (geometry: THREE.BufferGeometry): THREE.BufferGeometry =>
+        filterTriangles(geometry.applyMatrix4(bake), () => true);
 
-    const spinning = [];
-    let armGeometry = null;
+    const spinning: THREE.BufferGeometry[] = [];
+    let armGeometry: THREE.BufferGeometry | null = null;
     for (const mesh of meshes) {
         const world = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld).toNonIndexed();
         if (mesh === column) {
@@ -243,33 +307,33 @@ function buildSteeringWheel(meshes, bake) {
     return { geometry: markShared(geometry), pivot, axis, armGeometry };
 }
 
-function buildPedal(meshes, bake) {
+function buildPedal(meshes: THREE.Mesh[], bake: THREE.Matrix4): PivotPart {
     const geometry = mergeBaked(meshes, bake);
     geometry.computeBoundingBox();
-    const box = geometry.boundingBox;
+    const box = geometry.boundingBox as THREE.Box3;
     // Hinge at the top so pressing rotates the pad forward and down around X
     const pivot = new THREE.Vector3((box.min.x + box.max.x) / 2, box.max.y, (box.min.z + box.max.z) / 2);
     geometry.translate(-pivot.x, -pivot.y, -pivot.z);
     return { geometry: markShared(geometry), pivot, orientation: new THREE.Quaternion() };
 }
 
-function buildShifter(meshes, bake) {
+function buildShifter(meshes: THREE.Mesh[], bake: THREE.Matrix4): PivotPart {
     const geometry = mergeBaked(meshes, bake);
     geometry.computeBoundingBox();
-    const box = geometry.boundingBox;
+    const box = geometry.boundingBox as THREE.Box3;
     // Hinge at the base so tilting rocks the lever forward and back around X
     const pivot = new THREE.Vector3((box.min.x + box.max.x) / 2, box.min.y, (box.min.z + box.max.z) / 2);
     geometry.translate(-pivot.x, -pivot.y, -pivot.z);
     return { geometry: markShared(geometry), pivot, orientation: new THREE.Quaternion() };
 }
 
-function worldBox(meshes) {
+function worldBox(meshes: THREE.Mesh[]): THREE.Box3 {
     const box = new THREE.Box3();
     meshes.forEach(mesh => box.expandByObject(mesh));
     return box;
 }
 
-function extractPoints(geometry) {
+function extractPoints(geometry: THREE.BufferGeometry): Float32Array {
     const position = geometry.attributes.position;
     const points = new Float32Array(position.count * 3);
     for (let i = 0; i < position.count; i++) {
@@ -280,7 +344,7 @@ function extractPoints(geometry) {
     return points;
 }
 
-function markShared(resource) {
+function markShared<T extends THREE.BufferGeometry | THREE.Material>(resource: T): T {
     resource.userData.shared = true;
     return resource;
 }

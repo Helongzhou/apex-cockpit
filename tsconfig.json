@@ -12,6 +12,7 @@
     "noImplicitOverride": true,
     "noEmit": true,
     "isolatedModules": true,
+    "useDefineForClassFields": false,
     "allowJs": true,
     "checkJs": false,
     "resolveJsonModule": true,

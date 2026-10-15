@@ -1,8 +1,10 @@
-// car.js - Car assembly: chassis, suspension, steering and wheel joints on top of Rapier
+// car.ts - Car assembly: chassis, suspension, steering and wheel joints on top of Rapier
 import * as THREE from 'three';
 import { RAPIER, COLLISION_GROUPS, syncMeshWithBody } from './physics-world.js';
-import { loadCarModel } from './car-model.js';
+import { loadCarModel, type CarModelData, type PivotPart, type WheelPart } from './car-model.js';
 import { createCarLights } from './car-lights.js';
+import type { CarVisualState } from './controls.js';
+import type { CockpitRig } from './follow-camera.js';
 
 const SPAWN_POSITION = { x: 0, y: 5, z: 0 };
 const CHASSIS = {
@@ -14,7 +16,15 @@ const CHASSIS = {
     additionalSolverIterations: 4
 };
 // The car drives towards +Z in Three.js' right-handed world, so +X is the car's left side
-const WHEEL_CORNERS = [
+export interface WheelCorner {
+    name: string;
+    signX: number;
+    signZ: number;
+    isSteered: boolean;
+    isPowered: boolean;
+}
+
+const WHEEL_CORNERS: readonly WheelCorner[] = [
     { name: 'frontLeft', signX: 1, signZ: 1, isSteered: true, isPowered: true },
     { name: 'frontRight', signX: -1, signZ: 1, isSteered: true, isPowered: true },
     { name: 'rearLeft', signX: 1, signZ: -1, isSteered: false, isPowered: false },
@@ -47,8 +57,44 @@ const IDENTITY_ROTATION = { x: 0, y: 0, z: 0, w: 1 };
 // Rapier cylinders point along Y; this rotation aligns them with the wheel axis (X)
 const CYLINDER_TO_X_AXIS = { x: 0, y: 0, z: -Math.SQRT1_2, w: Math.SQRT1_2 };
 
+export interface WheelAssembly {
+    name: string;
+    driveJoint: RAPIER.RevoluteImpulseJoint | null;
+    steeringJoint: RAPIER.RevoluteImpulseJoint | null;
+    syncMesh(): void;
+}
+
+export interface Cockpit {
+    steeringWheel: THREE.Mesh;
+    steeringAxis: THREE.Vector3;
+    gasPedalGroup: THREE.Group;
+    brakePedalGroup: THREE.Group;
+    shifterGroup: THREE.Group;
+    rig: CockpitRig;
+}
+
+export interface CarOptions {
+    mesh: THREE.Mesh;
+    body: RAPIER.RigidBody;
+    wheelAssemblies: WheelAssembly[];
+    cockpit: Cockpit;
+    ackermann: (averageAngle: number) => [number, number];
+}
+
 export class Car {
-    constructor({ mesh, body, wheelAssemblies, cockpit, ackermann }) {
+    mesh: THREE.Mesh;
+    body: RAPIER.RigidBody;
+    wheelAssemblies: WheelAssembly[];
+    cockpit: Cockpit;
+    ackermann: (averageAngle: number) => [number, number];
+    gasPress: number;
+    brakePress: number;
+    shiftPos: number;
+    driveJoints: RAPIER.RevoluteImpulseJoint[];
+    steeringJoints: { left: RAPIER.RevoluteImpulseJoint; right: RAPIER.RevoluteImpulseJoint };
+    _forward: THREE.Vector3;
+
+    constructor({ mesh, body, wheelAssemblies, cockpit, ackermann }: CarOptions) {
         this.mesh = mesh;
         this.body = body;
         this.wheelAssemblies = wheelAssemblies;
@@ -57,63 +103,66 @@ export class Car {
         this.gasPress = 0;
         this.brakePress = 0;
         this.shiftPos = 0;
-        this.driveJoints = wheelAssemblies.filter(wheel => wheel.driveJoint).map(wheel => wheel.driveJoint);
+        this.driveJoints = wheelAssemblies
+            .map(wheel => wheel.driveJoint)
+            .filter((joint): joint is RAPIER.RevoluteImpulseJoint => joint !== null);
+        // The steered corners below always create their steering joint.
         this.steeringJoints = {
-            left: wheelAssemblies.find(wheel => wheel.name === 'frontLeft').steeringJoint,
-            right: wheelAssemblies.find(wheel => wheel.name === 'frontRight').steeringJoint
+            left: (wheelAssemblies.find(wheel => wheel.name === 'frontLeft') as WheelAssembly).steeringJoint as RAPIER.RevoluteImpulseJoint,
+            right: (wheelAssemblies.find(wheel => wheel.name === 'frontRight') as WheelAssembly).steeringJoint as RAPIER.RevoluteImpulseJoint
         };
         this._forward = new THREE.Vector3();
     }
 
-    get position() {
+    get position(): THREE.Vector3 {
         return this.mesh.position;
     }
 
-    linearVelocity() {
+    linearVelocity(): RAPIER.Vector {
         return this.body.linvel();
     }
 
-    /** @returns {number} heading around the Y axis in radians */
-    yaw() {
+    /** @returns heading around the Y axis in radians */
+    yaw(): number {
         const forward = this._forward.set(0, 0, 1).applyQuaternion(this.mesh.quaternion);
         return Math.atan2(forward.x, forward.z);
     }
 
-    setMotorSpeed(targetAngularVelocity) {
+    setMotorSpeed(targetAngularVelocity: number): void {
         for (const joint of this.driveJoints) {
             joint.configureMotorVelocity(targetAngularVelocity, DRIVE_MOTOR.damping);
         }
     }
 
-    setBrake(isBraking) {
+    setBrake(isBraking: boolean): void {
         const maxForce = isBraking ? DRIVE_MOTOR.brakeForce : DRIVE_MOTOR.maxForce;
         for (const joint of this.driveJoints) {
             joint.setMotorMaxForce(maxForce);
         }
     }
 
-    setSteeringAngle(averageAngle) {
+    setSteeringAngle(averageAngle: number): void {
         const [innerAngle, outerAngle] = this.ackermann(averageAngle);
         this.steeringJoints.left.configureMotorPosition(innerAngle, STEERING_MOTOR.stiffness, STEERING_MOTOR.damping);
         this.steeringJoints.right.configureMotorPosition(outerAngle, STEERING_MOTOR.stiffness, STEERING_MOTOR.damping);
     }
 
     /** One-shot jump impulse when the jump key is pressed */
-    jump() {
+    jump(): void {
         this.body.applyImpulse({ x: 0, y: JUMP_FORCE, z: 0 }, true);
         const velocity = this.body.linvel();
         this.body.setLinvel({ x: velocity.x, y: JUMP_FORCE / 100, z: velocity.z }, true);
     }
 
     /** Continuous upward force for as long as the jump input is held */
-    holdJump() {
+    holdJump(): void {
         this.body.applyImpulse({ x: 0, y: JUMP_FORCE / 2, z: 0 }, true);
         const velocity = this.body.linvel();
         const liftedVelocity = Math.min(velocity.y + JUMP_FORCE / 200, JUMP_FORCE / 50);
         this.body.setLinvel({ x: velocity.x, y: liftedVelocity, z: velocity.z }, true);
     }
 
-    syncMeshes() {
+    syncMeshes(): void {
         syncMeshWithBody(this.mesh, this.body);
         for (const wheel of this.wheelAssemblies) {
             wheel.syncMesh();
@@ -124,16 +173,14 @@ export class Car {
      * Turns the dashboard steering wheel in time with the controls; the road wheels animate on their own
      * because their meshes follow the physics wheel bodies. The gear lever rocks in every view, the pedals
      * only in the interior view, where they are actually visible.
-     * @param {{ steerAngle: number, forward: boolean, backward: boolean, brake: boolean }} input
-     * @param {boolean} inCockpit
      */
-    updateVisuals(input, inCockpit) {
+    updateVisuals(input: CarVisualState, inCockpit: boolean): void {
         this.cockpit.steeringWheel.setRotationFromAxisAngle(this.cockpit.steeringAxis, -input.steerAngle * STEERING_WHEEL_RATIO);
         this.animateCockpitControls(input, inCockpit);
     }
 
     /** Presses each pedal on its own input and rocks the gear lever (fore = accelerate, aft = brake/reverse). */
-    animateCockpitControls(input, inCockpit) {
+    animateCockpitControls(input: CarVisualState, inCockpit: boolean): void {
         const gasTarget = inCockpit && (input.forward || input.backward) ? PEDAL_PRESS_ANGLE : 0;
         this.gasPress += (gasTarget - this.gasPress) * PEDAL_SMOOTHING;
         this.cockpit.gasPedalGroup.rotation.x = this.gasPress;
@@ -156,11 +203,8 @@ export class Car {
 
 /**
  * Builds the complete car (visuals + physics) at the spawn position
- * @param {THREE.Scene} scene
- * @param {RAPIER.World} world
- * @returns {Promise<Car>}
  */
-export async function createCar(scene, world) {
+export async function createCar(scene: THREE.Scene, world: RAPIER.World): Promise<Car> {
     const model = await loadCarModel();
 
     const mesh = new THREE.Mesh(model.bodyGeometry, model.bodyMaterial);
@@ -173,7 +217,7 @@ export async function createCar(scene, world) {
     const body = createChassisBody(world, model);
     const wheelsByCorner = new Map(model.wheels.map(wheel => [wheel.corner, wheel]));
     const wheelAssemblies = WHEEL_CORNERS.map(corner =>
-        createWheelAssembly(scene, world, body, corner, model, wheelsByCorner.get(corner.name))
+        createWheelAssembly(scene, world, body, corner, model, wheelsByCorner.get(corner.name) as WheelPart)
     );
 
     const cockpit = buildCockpit(mesh, model);
@@ -184,7 +228,7 @@ export async function createCar(scene, world) {
 }
 
 /** Adds the window glass as a separate translucent mesh so the body itself stays opaque. */
-function addGlass(bodyMesh, model) {
+function addGlass(bodyMesh: THREE.Mesh, model: CarModelData): void {
     if (!model.glassGeometry) {
         return;
     }
@@ -203,8 +247,8 @@ function addGlass(bodyMesh, model) {
 }
 
 /** Adds the steering wheel, pedals and gear lever to the body; the steering wheel spins around its column axis. */
-function buildCockpit(bodyMesh, model) {
-    bodyMesh.material.side = THREE.DoubleSide; // so the interior renders when the cockpit camera is inside
+function buildCockpit(bodyMesh: THREE.Mesh, model: CarModelData): Cockpit {
+    (bodyMesh.material as THREE.Material).side = THREE.DoubleSide; // so the interior renders when the cockpit camera is inside
 
     const steeringGroup = new THREE.Group();
     steeringGroup.position.copy(model.steeringWheel.pivot);
@@ -236,14 +280,14 @@ function buildCockpit(bodyMesh, model) {
 }
 
 /** Driver's-eye camera rig in the body's local frame: where the eye sits and the point it looks at. */
-function cockpitRig(model) {
+function cockpitRig(model: CarModelData): CockpitRig {
     const eye = model.steeringWheel.pivot.clone().add(new THREE.Vector3(COCKPIT_EYE_OFFSET.x, COCKPIT_EYE_OFFSET.y, COCKPIT_EYE_OFFSET.z));
     const look = eye.clone().add(new THREE.Vector3(COCKPIT_LOOK_OFFSET.x, COCKPIT_LOOK_OFFSET.y, COCKPIT_LOOK_OFFSET.z));
     return { eye, look };
 }
 
 /** A group placed at the part's pivot, carrying its tilt, with the recentred mesh inside. */
-function createPivotMesh(part, material) {
+function createPivotMesh(part: PivotPart, material: THREE.Material): THREE.Group {
     const group = new THREE.Group();
     group.position.copy(part.pivot);
     group.quaternion.copy(part.orientation);
@@ -253,7 +297,7 @@ function createPivotMesh(part, material) {
     return group;
 }
 
-function createChassisBody(world, model) {
+function createChassisBody(world: RAPIER.World, model: CarModelData): RAPIER.RigidBody {
     const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
         .setTranslation(SPAWN_POSITION.x, SPAWN_POSITION.y, SPAWN_POSITION.z)
         .setCanSleep(false)
@@ -278,7 +322,14 @@ function createChassisBody(world, model) {
  * Front: chassis -[revolute Y: steering]- knuckle -[prismatic Y: suspension]- axle -[revolute X: spin]- wheel
  * Rear:  chassis -[prismatic Y: suspension]- axle -[revolute X: spin]- wheel
  */
-function createWheelAssembly(scene, world, chassisBody, corner, model, wheelPart) {
+function createWheelAssembly(
+    scene: THREE.Scene,
+    world: RAPIER.World,
+    chassisBody: RAPIER.RigidBody,
+    corner: WheelCorner,
+    model: CarModelData,
+    wheelPart: WheelPart
+): WheelAssembly {
     const position = { x: corner.signX * model.halfTrack, y: WHEEL_HEIGHT, z: corner.signZ * model.halfWheelbase };
     const anchorOnChassis = {
         x: position.x - SPAWN_POSITION.x,
@@ -289,7 +340,7 @@ function createWheelAssembly(scene, world, chassisBody, corner, model, wheelPart
     let suspensionParent = chassisBody;
     let anchorOnParent = anchorOnChassis;
     let axleMass = AXLE.mass;
-    let steeringJoint = null;
+    let steeringJoint: RAPIER.RevoluteImpulseJoint | null = null;
     if (corner.isSteered) {
         const knuckleBody = createMassOnlyBody(world, position, AXLE.mass * AXLE.steeringMassShare);
         steeringJoint = createSteeringJoint(world, chassisBody, knuckleBody, anchorOnChassis);
@@ -302,7 +353,7 @@ function createWheelAssembly(scene, world, chassisBody, corner, model, wheelPart
     createSuspensionJoint(world, suspensionParent, axleBody, anchorOnParent);
 
     const wheelBody = createWheelBody(world, position, model.wheelRadius);
-    const spinJoint = world.createImpulseJoint(RAPIER.JointData.revolute(ORIGIN, ORIGIN, AXIS_X), axleBody, wheelBody, true);
+    const spinJoint = world.createImpulseJoint(RAPIER.JointData.revolute(ORIGIN, ORIGIN, AXIS_X), axleBody, wheelBody, true) as RAPIER.RevoluteImpulseJoint;
     const driveJoint = corner.isPowered ? configureDriveMotor(spinJoint) : null;
 
     const wheelMesh = new THREE.Mesh(wheelPart.geometry, model.bodyMaterial);
@@ -320,34 +371,44 @@ function createWheelAssembly(scene, world, chassisBody, corner, model, wheelPart
     };
 }
 
-function createSteeringJoint(world, chassisBody, knuckleBody, anchorOnChassis) {
+function createSteeringJoint(
+    world: RAPIER.World,
+    chassisBody: RAPIER.RigidBody,
+    knuckleBody: RAPIER.RigidBody,
+    anchorOnChassis: { x: number; y: number; z: number }
+): RAPIER.RevoluteImpulseJoint {
     const joint = world.createImpulseJoint(
         RAPIER.JointData.revolute(anchorOnChassis, ORIGIN, AXIS_Y), chassisBody, knuckleBody, true
-    );
+    ) as RAPIER.RevoluteImpulseJoint;
     joint.configureMotorModel(RAPIER.MotorModel.ForceBased);
     joint.setMotorMaxForce(STEERING_MOTOR.maxForce);
     joint.configureMotorPosition(0, STEERING_MOTOR.stiffness, STEERING_MOTOR.damping);
     return joint;
 }
 
-function createSuspensionJoint(world, parentBody, axleBody, anchorOnParent) {
+function createSuspensionJoint(
+    world: RAPIER.World,
+    parentBody: RAPIER.RigidBody,
+    axleBody: RAPIER.RigidBody,
+    anchorOnParent: { x: number; y: number; z: number }
+): RAPIER.PrismaticImpulseJoint {
     const joint = world.createImpulseJoint(
         RAPIER.JointData.prismatic(anchorOnParent, ORIGIN, AXIS_Y), parentBody, axleBody, true
-    );
+    ) as RAPIER.PrismaticImpulseJoint;
     joint.setLimits(-SUSPENSION.maxTravel, SUSPENSION.maxTravel);
     joint.configureMotorModel(RAPIER.MotorModel.ForceBased);
     joint.configureMotorPosition(0, SUSPENSION.stiffness, SUSPENSION.damping);
     return joint;
 }
 
-function configureDriveMotor(spinJoint) {
+function configureDriveMotor(spinJoint: RAPIER.RevoluteImpulseJoint): RAPIER.RevoluteImpulseJoint {
     spinJoint.configureMotorModel(RAPIER.MotorModel.ForceBased);
     spinJoint.setMotorMaxForce(DRIVE_MOTOR.maxForce);
     spinJoint.configureMotorVelocity(0, DRIVE_MOTOR.damping);
     return spinJoint;
 }
 
-function createMassOnlyBody(world, position, mass) {
+function createMassOnlyBody(world: RAPIER.World, position: { x: number; y: number; z: number }, mass: number): RAPIER.RigidBody {
     const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
         .setTranslation(position.x, position.y, position.z)
         .setCanSleep(false)
@@ -355,7 +416,7 @@ function createMassOnlyBody(world, position, mass) {
     return world.createRigidBody(bodyDesc);
 }
 
-function createWheelBody(world, position, radius) {
+function createWheelBody(world: RAPIER.World, position: { x: number; y: number; z: number }, radius: number): RAPIER.RigidBody {
     const bodyDesc = RAPIER.RigidBodyDesc.dynamic()
         .setTranslation(position.x, position.y, position.z)
         .setCanSleep(false);
@@ -373,14 +434,14 @@ function createWheelBody(world, position, radius) {
 }
 
 /** Principal inertia of a solid cylinder whose axis points along X */
-function cylinderInertia(mass, radius, length) {
+function cylinderInertia(mass: number, radius: number, length: number): { x: number; y: number; z: number } {
     const aroundAxis = 0.5 * mass * radius * radius;
     const acrossAxis = mass * (3 * radius * radius + length * length) / 12;
     return { x: aroundAxis, y: acrossAxis, z: acrossAxis };
 }
 
 /** Principal inertia of a solid box, used as approximation for the car body */
-function boxInertia(mass, size) {
+function boxInertia(mass: number, size: { x: number; y: number; z: number }): { x: number; y: number; z: number } {
     const factor = mass / 12;
     return {
         x: factor * (size.y * size.y + size.z * size.z),
@@ -390,7 +451,7 @@ function boxInertia(mass, size) {
 }
 
 /** Ackermann steering derived from the model's wheelbase and track: the inner wheel turns sharper */
-function makeAckermann(model) {
+function makeAckermann(model: CarModelData): (averageAngle: number) => [number, number] {
     const wheelbase = 2 * model.halfWheelbase;
     const trackWidth = 2 * model.halfTrack;
     return (averageAngle) => {

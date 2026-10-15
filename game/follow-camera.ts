@@ -1,4 +1,4 @@
-// follow-camera.js - Port of the Babylon.js FollowCamera including the mouse orbit control
+// follow-camera.ts - Port of the Babylon.js FollowCamera including the mouse orbit control
 import * as THREE from 'three';
 
 const FIELD_OF_VIEW_DEGREES = 45.8; // Babylon.js default camera fov (0.8 rad)
@@ -15,8 +15,27 @@ const FOLLOW = {
 };
 const MOUSE_DEGREES_PER_PIXEL = 0.5;
 
+/** Driver's-eye rig in the car's local frame. */
+export interface CockpitRig {
+    eye: THREE.Vector3;
+    look: THREE.Vector3;
+}
+
 export class FollowCamera {
-    constructor(canvas) {
+    camera: THREE.PerspectiveCamera;
+    rotationOffset: number;
+    lockedTarget: THREE.Object3D | null;
+    isMouseDown: boolean;
+    canvas: HTMLCanvasElement;
+    cockpit: boolean;
+    cockpitRig: CockpitRig | null;
+    scratch: { goal: THREE.Vector3; forward: THREE.Vector3; eye: THREE.Vector3; look: THREE.Vector3 };
+    onPointerDown: () => void;
+    onPointerUp: () => void;
+    onPointerMove: (event: PointerEvent) => void;
+    onKeyDown: (event: KeyboardEvent) => void;
+
+    constructor(canvas: HTMLCanvasElement) {
         this.camera = new THREE.PerspectiveCamera(
             FIELD_OF_VIEW_DEGREES, window.innerWidth / window.innerHeight, NEAR_PLANE, FAR_PLANE
         );
@@ -49,27 +68,27 @@ export class FollowCamera {
         window.addEventListener('keydown', this.onKeyDown);
     }
 
-    lockTarget(object) {
+    lockTarget(object: THREE.Object3D): void {
         this.lockedTarget = object;
     }
 
     /** Interior camera pose in the car's local frame: { eye, look } vectors. */
-    setCockpitRig(rig) {
+    setCockpitRig(rig: CockpitRig): void {
         this.cockpitRig = rig;
     }
 
-    setCockpit(on) {
+    setCockpit(on: boolean): void {
         this.cockpit = on;
         this.camera.fov = on ? COCKPIT_FIELD_OF_VIEW_DEGREES : FIELD_OF_VIEW_DEGREES;
         this.camera.updateProjectionMatrix();
     }
 
-    setAspect(aspect) {
+    setAspect(aspect: number): void {
         this.camera.aspect = aspect;
         this.camera.updateProjectionMatrix();
     }
 
-    update() {
+    update(): void {
         if (!this.lockedTarget) {
             return;
         }
@@ -91,18 +110,20 @@ export class FollowCamera {
     }
 
     /** Rigidly places the camera at the driver's eye, looking forward through the windshield. */
-    updateCockpit() {
-        const car = this.lockedTarget;
+    updateCockpit(): void {
+        // update() only routes here while both are set.
+        const car = this.lockedTarget as THREE.Object3D;
+        const rig = this.cockpitRig as CockpitRig;
         car.updateWorldMatrix(true, false);
-        this.camera.position.copy(this.scratch.eye.copy(this.cockpitRig.eye).applyMatrix4(car.matrixWorld));
+        this.camera.position.copy(this.scratch.eye.copy(rig.eye).applyMatrix4(car.matrixWorld));
         this.camera.up.set(0, 1, 0).applyQuaternion(car.quaternion);
-        this.camera.lookAt(this.scratch.look.copy(this.cockpitRig.look).applyMatrix4(car.matrixWorld));
+        this.camera.lookAt(this.scratch.look.copy(rig.look).applyMatrix4(car.matrixWorld));
     }
 
     /** The camera's goal position behind the car, written into `goal`. */
-    computeGoalPosition(goal) {
-        const target = this.lockedTarget.position;
-        const forward = this.scratch.forward.set(0, 0, 1).applyQuaternion(this.lockedTarget.quaternion);
+    computeGoalPosition(goal: THREE.Vector3): THREE.Vector3 {
+        const target = (this.lockedTarget as THREE.Object3D).position;
+        const forward = this.scratch.forward.set(0, 0, 1).applyQuaternion((this.lockedTarget as THREE.Object3D).quaternion);
         const yaw = Math.atan2(forward.x, forward.z);
         // Babylon.js uses sin/cos(rotationOffset + yaw) in its left-handed system; with the X axis
         // mirrored for Three.js the yaw changes sign, which keeps the orbit direction identical.
@@ -115,7 +136,7 @@ export class FollowCamera {
         );
     }
 
-    dispose() {
+    dispose(): void {
         this.canvas.removeEventListener('pointerdown', this.onPointerDown);
         window.removeEventListener('pointerup', this.onPointerUp);
         window.removeEventListener('pointermove', this.onPointerMove);
@@ -123,6 +144,6 @@ export class FollowCamera {
     }
 }
 
-function clampSpeed(value) {
+function clampSpeed(value: number): number {
     return THREE.MathUtils.clamp(value, -FOLLOW.maxCameraSpeed, FOLLOW.maxCameraSpeed);
 }

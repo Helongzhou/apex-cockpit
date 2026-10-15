@@ -1,5 +1,6 @@
-// physics-world.js - Rapier physics world setup and shared physics helpers
+// physics-world.ts - Rapier physics world setup and shared physics helpers
 import RAPIER from '@dimforge/rapier3d-compat';
+import type { Object3D } from 'three';
 
 const GRAVITY = { x: 0, y: -150, z: 0 };
 const PHYSICS_TIMESTEP = 1 / 120;
@@ -15,13 +16,12 @@ export const COLLISION_GROUPS = {
     Environment: (MEMBERSHIP.Environment << 16) | ALL_GROUPS
 };
 
-let engineReady = null;
+let engineReady: Promise<void> | null = null;
 
 /**
  * Loads the Rapier WASM module once
- * @returns {Promise<void>}
  */
-export function initPhysicsEngine() {
+export function initPhysicsEngine(): Promise<void> {
     if (!engineReady) {
         engineReady = RAPIER.init();
     }
@@ -30,9 +30,8 @@ export function initPhysicsEngine() {
 
 /**
  * Creates a physics world with the gravity and solver settings of the original game
- * @returns {RAPIER.World}
  */
-export function createPhysicsWorld() {
+export function createPhysicsWorld(): RAPIER.World {
     const world = new RAPIER.World(GRAVITY);
     world.timestep = PHYSICS_TIMESTEP;
     world.numSolverIterations = SOLVER_ITERATIONS;
@@ -44,14 +43,18 @@ export function createPhysicsWorld() {
  * Advances the world with a fixed timestep, catching up on the elapsed frame time
  */
 export class PhysicsStepper {
-    constructor(world) {
+    world: RAPIER.World;
+    accumulator: number;
+    /** Simulated seconds so far, independent of frame rate and tab visibility */
+    elapsedSeconds: number;
+
+    constructor(world: RAPIER.World) {
         this.world = world;
         this.accumulator = 0;
-        /** Simulated seconds so far, independent of frame rate and tab visibility */
         this.elapsedSeconds = 0;
     }
 
-    step(deltaSeconds) {
+    step(deltaSeconds: number): void {
         this.accumulator += Math.min(deltaSeconds, PHYSICS_TIMESTEP * MAX_STEPS_PER_FRAME);
 
         let steps = 0;
@@ -66,10 +69,8 @@ export class PhysicsStepper {
 
 /**
  * Copies the rigid body transform onto a Three.js object
- * @param {import('three').Object3D} mesh
- * @param {RAPIER.RigidBody} body
  */
-export function syncMeshWithBody(mesh, body) {
+export function syncMeshWithBody(mesh: Object3D, body: RAPIER.RigidBody): void {
     const translation = body.translation();
     const rotation = body.rotation();
     mesh.position.set(translation.x, translation.y, translation.z);

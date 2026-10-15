@@ -1,20 +1,41 @@
-// car-lights.js - Lights the model's own headlight and taillight meshes: emissive glow plus a spot light each
+// car-lights.ts - Lights the model's own headlight and taillight meshes: emissive glow plus a spot light each
 import * as THREE from 'three';
 import { babylonColor } from './color.js';
 import { GLOW_LAYER } from './rendering.js';
 
 const SPOT_PENUMBRA = 0.5;
 const SPOT_DECAY = 1;
-const WARM_WHITE = [0.867, 0.773, 0.518]; // #ddc584
+const WARM_WHITE: readonly [number, number, number] = [0.867, 0.773, 0.518]; // #ddc584
 
-const HEADLIGHT = {
+interface LampSpotConfig {
+    intensity: number;
+    range: number;
+    coneAngle: number;
+    shadow: boolean;
+    shadowMapSize?: number;
+}
+
+interface LampConfig {
+    color: readonly [number, number, number];
+    emissive: number;
+    forwardZ: number;
+    droop: number;
+    spot: LampSpotConfig;
+}
+
+interface LampModel {
+    headlightGeometry: THREE.BufferGeometry;
+    taillightGeometry: THREE.BufferGeometry;
+}
+
+const HEADLIGHT: LampConfig = {
     color: WARM_WHITE,
     emissive: 1.8, // strength of the glow-layer bloom on the lamp mesh
     forwardZ: 1,
     droop: 0.3,
     spot: { intensity: 180, range: 60, coneAngle: Math.PI / 2, shadow: true, shadowMapSize: 1024 }
 };
-const TAILLIGHT = {
+const TAILLIGHT: LampConfig = {
     color: [1, 0, 0],
     emissive: 1.1, // red reads as brighter, so it needs less to avoid washing out the car
     forwardZ: -1,
@@ -24,16 +45,14 @@ const TAILLIGHT = {
 
 /**
  * Makes the model's headlight and taillight meshes glow and casts light from them.
- * @param {THREE.Object3D} bodyMesh
- * @param {{ headlightGeometry: THREE.BufferGeometry, taillightGeometry: THREE.BufferGeometry }} model
  */
-export function createCarLights(bodyMesh, model) {
+export function createCarLights(bodyMesh: THREE.Object3D, model: LampModel): void {
     addLamp(bodyMesh, model.headlightGeometry, HEADLIGHT);
     addLamp(bodyMesh, model.taillightGeometry, TAILLIGHT);
     console.log('💡 Model headlights and taillights lit');
 }
 
-function addLamp(bodyMesh, geometry, config) {
+function addLamp(bodyMesh: THREE.Object3D, geometry: THREE.BufferGeometry, config: LampConfig): void {
     const color = babylonColor(...config.color);
     const material = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: config.emissive });
     const mesh = new THREE.Mesh(geometry, material);
@@ -44,9 +63,16 @@ function addLamp(bodyMesh, geometry, config) {
     addSpotLight(bodyMesh, geometry, config, color);
 }
 
-function addSpotLight(bodyMesh, geometry, config, color) {
+function addSpotLight(
+    bodyMesh: THREE.Object3D,
+    geometry: THREE.BufferGeometry,
+    config: LampConfig,
+    color: THREE.Color
+): void {
     geometry.computeBoundingBox();
-    const center = geometry.boundingBox.getCenter(new THREE.Vector3());
+    // computeBoundingBox() above always fills the box in.
+    const box = geometry.boundingBox as THREE.Box3;
+    const center = box.getCenter(new THREE.Vector3());
     const spot = config.spot;
 
     const light = new THREE.SpotLight(color, spot.intensity, spot.range, spot.coneAngle / 2, SPOT_PENUMBRA, SPOT_DECAY);
@@ -57,7 +83,7 @@ function addSpotLight(bodyMesh, geometry, config, color) {
 
     if (spot.shadow) {
         light.castShadow = true;
-        light.shadow.mapSize.set(spot.shadowMapSize, spot.shadowMapSize);
+        light.shadow.mapSize.set(spot.shadowMapSize ?? 1024, spot.shadowMapSize ?? 1024);
         light.shadow.bias = -0.0005;
     }
 }

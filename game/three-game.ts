@@ -1,33 +1,34 @@
-// three-game.js - Three.js + Rapier game entry points used by index.js and the Vue app
+// three-game.ts - Three.js + Rapier game entry points used by the React app
 import * as THREE from 'three';
 import { initPhysicsEngine } from './physics-world.js';
 import { createRenderer, requestShadowUpdate, GlowComposer } from './rendering.js';
 import { GameSession } from './game-session.js';
 import { FpsMeter } from './fps-meter.js';
+import type { GameHost } from './types.js';
 
 const CANVAS_FOCUS_DELAY_MS = 100;
 
-let canvas;
-let renderer;
-let glowComposer;
-let fpsMeter;
-let session = null;
+let canvas: HTMLCanvasElement;
+let renderer: THREE.WebGLRenderer;
+let glowComposer: GlowComposer;
+let fpsMeter: FpsMeter;
+let session: GameSession | null = null;
 const timer = new THREE.Timer();
 
 /**
  * Initialize renderer, physics engine and the first game session
- * @param {Object} vueApp - Vue application instance
+ * @param host - the UI-side state host the game writes into
  */
-export function initializeGame(vueApp) {
-    canvas = document.getElementById('renderCanvas');
+export function initializeGame(host: GameHost): void {
+    canvas = document.getElementById('renderCanvas') as HTMLCanvasElement;
     renderer = createRenderer(canvas);
     glowComposer = new GlowComposer(renderer);
     fpsMeter = new FpsMeter(fps => {
-        vueApp.fps = fps;
+        host.fps = fps;
     });
 
     initPhysicsEngine()
-        .then(() => startSession(vueApp))
+        .then(() => startSession(host))
         .then(() => {
             renderer.setAnimationLoop(renderFrame);
             window.addEventListener('resize', handleResize);
@@ -39,16 +40,15 @@ export function initializeGame(vueApp) {
 
 /**
  * Reset the entire game scene
- * @param {Object} vueApp - Vue application instance
  */
-export async function resetGame(vueApp) {
+export async function resetGame(host: GameHost): Promise<void> {
     console.log('🔄 Resetting game using Three.js + Rapier...');
 
     renderer.setAnimationLoop(null);
     session?.dispose();
     session = null;
 
-    await startSession(vueApp);
+    await startSession(host);
     renderer.setAnimationLoop(renderFrame);
 
     // Re-focus canvas for immediate input with delay
@@ -58,45 +58,44 @@ export async function resetGame(vueApp) {
 
 /**
  * Reset the knockable boxes of the current session
- * @param {Object} vueApp - Vue application instance
  */
-export function resetBoxes(vueApp) {
-    vueApp.knockedBoxes = 0;
-    vueApp.boxesStatus.forEach(box => {
+export function resetBoxes(host: GameHost): void {
+    host.knockedBoxes = 0;
+    host.boxesStatus.forEach(box => {
         box.knocked = false;
     });
     session?.environment.resetBoxes();
 }
 
 /** Toggles the camera view from outside the render loop (e.g. the mobile View button). */
-export function toggleView() {
+export function toggleView(): void {
     const camera = session?.followCamera;
     if (camera) {
         camera.setCockpit(!camera.cockpit);
     }
 }
 
-async function startSession(vueApp) {
-    session = await GameSession.create(canvas, renderer, vueApp);
+async function startSession(host: GameHost): Promise<void> {
+    session = await GameSession.create(canvas, renderer, host);
     glowComposer.setScene(session.scene, session.camera);
     timer.update(); // discard the loading time so the first frame does not jump ahead
 }
 
-function renderFrame() {
+function renderFrame(): void {
     timer.update();
     requestShadowUpdate(renderer);
-    session.update(timer.getDelta());
+    session?.update(timer.getDelta());
     glowComposer.render();
     fpsMeter.tick();
 }
 
-function handleResize() {
+function handleResize(): void {
     renderer.setSize(window.innerWidth, window.innerHeight);
     glowComposer.setSize(window.innerWidth, window.innerHeight);
     session?.resize(window.innerWidth / window.innerHeight);
 }
 
-function setupCanvasFocus() {
+function setupCanvasFocus(): void {
     setTimeout(() => {
         canvas.setAttribute('tabindex', '0');
         canvas.focus();

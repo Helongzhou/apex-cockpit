@@ -1,5 +1,8 @@
-// telemetry.js - Vehicle data, race timer, collision and knocked-box detection for the Vue UI
+// telemetry.ts - Vehicle data, race timer, collision and knocked-box detection for the HUD
 import * as THREE from 'three';
+import type { Car } from './car.js';
+import type { GameHost } from './types.js';
+import type { KnockableBox } from './world.js';
 
 const SPEED_DEADZONE = 1;
 const RACE_START_SPEED = 2;
@@ -10,18 +13,30 @@ const FULL_CIRCLE_DEGREES = 360;
 // Every write to the reactive HUD re-renders it; 20 Hz keeps the readouts smooth without doing that on every frame
 const HUD_UPDATE_INTERVAL_MS = 50;
 
+export interface TelemetryOptions {
+    car: Car;
+    boxes: KnockableBox[];
+    host: GameHost;
+    physicsClock: { elapsedSeconds: number };
+}
+
 export class Telemetry {
-    /**
-     * @param {Object} options
-     * @param {import('./car.js').Car} options.car
-     * @param {import('./world.js').KnockableBox[]} options.boxes
-     * @param {Object} options.vueApp
-     * @param {{ elapsedSeconds: number }} options.physicsClock
-     */
-    constructor({ car, boxes, vueApp, physicsClock }) {
+    car: Car;
+    boxes: KnockableBox[];
+    host: GameHost;
+    physicsClock: { elapsedSeconds: number };
+    raceStarted: boolean;
+    raceStartTime: number;
+    lastSpeed: number;
+    peakSpeed: number;
+    nextHudUpdate: number;
+    lastCollisionTime: number;
+    lastKnockTimes: Map<string, number>;
+
+    constructor({ car, boxes, host, physicsClock }: TelemetryOptions) {
         this.car = car;
         this.boxes = boxes;
-        this.vueApp = vueApp;
+        this.host = host;
         this.physicsClock = physicsClock;
         this.raceStarted = false;
         this.raceStartTime = 0;
@@ -32,7 +47,7 @@ export class Telemetry {
         this.lastKnockTimes = new Map();
     }
 
-    update() {
+    update(): void {
         const velocity = this.car.linearVelocity();
         const rawSpeed = Math.hypot(velocity.x, velocity.y, velocity.z);
         const speed = rawSpeed < SPEED_DEADZONE ? 0 : rawSpeed;
@@ -46,7 +61,7 @@ export class Telemetry {
     }
 
     /** Writes the readouts at HUD rate; the detection above still runs on every frame */
-    updateHud(speed) {
+    updateHud(speed: number): void {
         const now = performance.now();
         if (now < this.nextHudUpdate) {
             return;
@@ -56,37 +71,37 @@ export class Telemetry {
         this.updateRaceTimer();
     }
 
-    updateVehicleData(speed) {
-        const vueApp = this.vueApp;
+    updateVehicleData(speed: number): void {
+        const host = this.host;
         const position = this.car.position;
 
-        vueApp.speed = speed;
-        vueApp.position.x = position.x;
-        vueApp.position.y = position.y;
-        vueApp.position.z = position.z;
-        vueApp.rotation = THREE.MathUtils.radToDeg(this.car.yaw()) % FULL_CIRCLE_DEGREES;
-        vueApp.maxSpeed = Math.max(vueApp.maxSpeed, this.peakSpeed);
+        host.speed = speed;
+        host.position.x = position.x;
+        host.position.y = position.y;
+        host.position.z = position.z;
+        host.rotation = THREE.MathUtils.radToDeg(this.car.yaw()) % FULL_CIRCLE_DEGREES;
+        host.maxSpeed = Math.max(host.maxSpeed, this.peakSpeed);
     }
 
     /** Auto-starts the race when the car starts moving */
-    startRaceWhenMoving(speed) {
+    startRaceWhenMoving(speed: number): void {
         if (this.raceStarted || speed <= RACE_START_SPEED) {
             return;
         }
         console.log('Race started automatically - car is moving!');
         this.raceStarted = true;
         this.raceStartTime = Date.now();
-        this.vueApp.isRacing = true;
+        this.host.isRacing = true;
     }
 
-    updateRaceTimer() {
-        if (this.raceStarted && this.vueApp.isRacing) {
-            this.vueApp.raceTime = (Date.now() - this.raceStartTime) / 1000;
+    updateRaceTimer(): void {
+        if (this.raceStarted && this.host.isRacing) {
+            this.host.raceTime = (Date.now() - this.raceStartTime) / 1000;
         }
     }
 
     /** A sudden speed drop counts as a collision */
-    detectCollision(rawSpeed) {
+    detectCollision(rawSpeed: number): void {
         const speedDrop = this.lastSpeed - rawSpeed;
         if (speedDrop <= COLLISION.speedDrop || this.lastSpeed <= COLLISION.minimumPreviousSpeed) {
             return;
@@ -95,13 +110,13 @@ export class Telemetry {
         if (now - this.lastCollisionTime <= COLLISION.cooldownSeconds) {
             return;
         }
-        this.vueApp.collisions++;
+        this.host.collisions++;
         this.lastCollisionTime = now;
-        console.log(`Collision detected! Speed change: ${speedDrop.toFixed(2)}, Total collisions: ${this.vueApp.collisions}`);
+        console.log(`Collision detected! Speed change: ${speedDrop.toFixed(2)}, Total collisions: ${this.host.collisions}`);
     }
 
     /** Boxes are checked after the physics settled, every box can be counted multiple times */
-    detectKnockedBoxes() {
+    detectKnockedBoxes(): void {
         const now = this.physicsClock.elapsedSeconds;
         if (now < BOX.settleTimeSeconds) {
             return;
@@ -117,10 +132,10 @@ export class Telemetry {
             if (movedDistance <= BOX.knockDistance || now - lastKnockTime <= BOX.cooldownSeconds) {
                 continue;
             }
-            this.vueApp.knockedBoxes++;
+            this.host.knockedBoxes++;
             this.lastKnockTimes.set(box.name, now);
             box.settle();
-            console.log(`Box ${box.name} moved ${movedDistance.toFixed(2)} units from settled position! Total: ${this.vueApp.knockedBoxes}`);
+            console.log(`Box ${box.name} moved ${movedDistance.toFixed(2)} units from settled position! Total: ${this.host.knockedBoxes}`);
         }
     }
 }

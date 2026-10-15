@@ -1,42 +1,59 @@
-// game-session.js - One playable round: scene, physics world, car, environment and the per-frame update
+// game-session.ts - One playable round: scene, physics world, car, environment and the per-frame update
 import * as THREE from 'three';
+import type { World } from '@dimforge/rapier3d-compat';
 import { babylonColor } from './color.js';
 import { createPhysicsWorld, PhysicsStepper } from './physics-world.js';
 import { ReflectionProbe } from './rendering.js';
 import { FollowCamera } from './follow-camera.js';
-import { createCar } from './car.js';
-import { createEnvironment } from './world.js';
+import { createCar, type Car } from './car.js';
+import { createEnvironment, type Environment } from './world.js';
 import { CarControls } from './controls.js';
 import { Telemetry } from './telemetry.js';
+import type { GameHost } from './types.js';
 
-const BACKGROUND_COLOR = [0.95, 0.95, 0.95];
+const BACKGROUND_COLOR = [0.95, 0.95, 0.95] as const;
 // Babylon.js direction (1, 1, 0) with the X axis mirrored for the right-handed world
-const HEMISPHERIC_LIGHT = { direction: [-1, 1, 0], intensity: 0.7 };
+const HEMISPHERIC_LIGHT = { direction: [-1, 1, 0] as const, intensity: 0.7 };
+
+export interface GameSessionOptions {
+    canvas: HTMLCanvasElement;
+    renderer: THREE.WebGLRenderer;
+    host: GameHost;
+    scene: THREE.Scene;
+    world: World;
+    car: Car;
+    environment: Environment;
+}
 
 export class GameSession {
-    /**
-     * @param {HTMLCanvasElement} canvas
-     * @param {THREE.WebGLRenderer} renderer
-     * @param {Object} vueApp
-     * @returns {Promise<GameSession>}
-     */
-    static async create(canvas, renderer, vueApp) {
+    renderer: THREE.WebGLRenderer;
+    scene: THREE.Scene;
+    world: World;
+    car: Car;
+    environment: Environment;
+    stepper: PhysicsStepper;
+    controls: CarControls;
+    telemetry: Telemetry;
+    followCamera: FollowCamera;
+    reflectionProbe: ReflectionProbe;
+
+    static async create(canvas: HTMLCanvasElement, renderer: THREE.WebGLRenderer, host: GameHost): Promise<GameSession> {
         const scene = createScene();
         const world = createPhysicsWorld();
         const car = await createCar(scene, world);
         const environment = createEnvironment(scene, world);
-        return new GameSession({ canvas, renderer, vueApp, scene, world, car, environment });
+        return new GameSession({ canvas, renderer, host, scene, world, car, environment });
     }
 
-    constructor({ canvas, renderer, vueApp, scene, world, car, environment }) {
+    constructor({ canvas, renderer, host, scene, world, car, environment }: GameSessionOptions) {
         this.renderer = renderer;
         this.scene = scene;
         this.world = world;
         this.car = car;
         this.environment = environment;
         this.stepper = new PhysicsStepper(world);
-        this.controls = new CarControls(car, vueApp);
-        this.telemetry = new Telemetry({ car, boxes: environment.boxes, vueApp, physicsClock: this.stepper });
+        this.controls = new CarControls(car, host);
+        this.telemetry = new Telemetry({ car, boxes: environment.boxes, host, physicsClock: this.stepper });
 
         this.followCamera = new FollowCamera(canvas);
         this.followCamera.lockTarget(car.mesh);
@@ -47,11 +64,11 @@ export class GameSession {
         this.reflectionProbe.attachToMesh(car.mesh);
     }
 
-    get camera() {
+    get camera(): THREE.Camera {
         return this.followCamera.camera;
     }
 
-    update(deltaSeconds) {
+    update(deltaSeconds: number): void {
         this.controls.update();
         this.car.updateVisuals(this.controls.getVisualState(), this.followCamera.cockpit);
         this.stepper.step(deltaSeconds);
@@ -62,11 +79,11 @@ export class GameSession {
         this.reflectionProbe.update(this.renderer, this.scene);
     }
 
-    resize(aspect) {
+    resize(aspect: number): void {
         this.followCamera.setAspect(aspect);
     }
 
-    dispose() {
+    dispose(): void {
         this.controls.dispose();
         this.followCamera.dispose();
         this.reflectionProbe.dispose();
@@ -75,7 +92,7 @@ export class GameSession {
     }
 }
 
-function createScene() {
+function createScene(): THREE.Scene {
     const scene = new THREE.Scene();
     scene.background = babylonColor(...BACKGROUND_COLOR);
 
@@ -87,15 +104,17 @@ function createScene() {
 }
 
 /** Frees GPU resources created for this session; assets marked as shared stay alive for the next one */
-function disposeSceneResources(scene) {
+function disposeSceneResources(scene: THREE.Scene): void {
     scene.traverse(object => {
-        if (object.isLight) {
-            object.dispose();
+        const light = object as THREE.Light;
+        if (light.isLight) {
+            light.dispose();
         }
-        if (object.geometry && !object.geometry.userData.shared) {
-            object.geometry.dispose();
+        const mesh = object as THREE.Mesh;
+        if (mesh.geometry && !mesh.geometry.userData.shared) {
+            mesh.geometry.dispose();
         }
-        const materials = Array.isArray(object.material) ? object.material : [object.material];
+        const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
         for (const material of materials) {
             if (material && !material.userData.shared) {
                 material.dispose();
