@@ -9,6 +9,7 @@
 import { createRoot } from 'react-dom/client';
 
 import { createGameHost } from './app';
+import { createDeterministicOptions } from './dev/deterministic';
 import { App } from './ui/App';
 
 import '../css/main.css';
@@ -18,10 +19,11 @@ import '../css/desktop-controls.css';
 import '../css/fps-counter.css';
 
 const { store, host } = createGameHost();
+const options = createDeterministicOptions();
 
 const container = document.getElementById('app');
 if (container === null) {
     throw new Error('The #app container is missing from index.html');
 }
 
-createRoot(container).render(<App store={store} host={host} />);
+createRoot(container).render(<App store={store} host={host} options={options} />);

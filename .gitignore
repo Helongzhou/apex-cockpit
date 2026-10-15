@@ -3,3 +3,5 @@ dist/
 .trae/
 .codebuddy/
 .codex/
+.playwright-browsers/
+deterministic-*.json

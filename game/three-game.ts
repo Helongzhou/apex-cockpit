@@ -8,18 +8,37 @@ import type { GameHost } from './types.js';
 
 const CANVAS_FOCUS_DELAY_MS = 100;
 
+/**
+ * Optional hooks used by the deterministic regression harness
+ * (`scripts/compare-deterministic.mjs`). With no options the game behaves exactly as before.
+ */
+export interface GameOptions {
+    /** Replaces the measured frame delta with a fixed value (deterministic runs). */
+    fixedDeltaSeconds?: number;
+    /**
+     * Called at the end of every rendered frame. The session is handed over so a harness can
+     * sample physics state instead of the 20 Hz-throttled HUD.
+     */
+    onFrame?: (frameIndex: number, session: GameSession | null) => void;
+}
+
 let canvas: HTMLCanvasElement;
 let renderer: THREE.WebGLRenderer;
 let glowComposer: GlowComposer;
 let fpsMeter: FpsMeter;
 let session: GameSession | null = null;
+let gameOptions: GameOptions = {};
+let frameIndex = 0;
 const timer = new THREE.Timer();
 
 /**
  * Initialize renderer, physics engine and the first game session
  * @param host - the UI-side state host the game writes into
+ * @param options - deterministic-run hooks; omitted in normal use
  */
-export function initializeGame(host: GameHost): void {
+export function initializeGame(host: GameHost, options: GameOptions = {}): void {
+    gameOptions = options;
+    frameIndex = 0;
     canvas = document.getElementById('renderCanvas') as HTMLCanvasElement;
     renderer = createRenderer(canvas);
     glowComposer = new GlowComposer(renderer);
@@ -84,9 +103,11 @@ async function startSession(host: GameHost): Promise<void> {
 function renderFrame(): void {
     timer.update();
     requestShadowUpdate(renderer);
-    session?.update(timer.getDelta());
+    session?.update(gameOptions.fixedDeltaSeconds ?? timer.getDelta());
     glowComposer.render();
     fpsMeter.tick();
+    frameIndex += 1;
+    gameOptions.onFrame?.(frameIndex, session);
 }
 
 function handleResize(): void {
