@@ -1,54 +1,54 @@
 {
-  "name": "three-js-car-example",
-  "version": "1.0.0",
-  "description": "Three.js + Rapier port of the Babylon.js car racing game: constraint-based car physics, Vue.js UI, intelligent device detection and cross-platform controls without a build step.",
-  "main": "index.js",
+  "name": "apex-cockpit",
+  "version": "0.1.0",
+  "private": true,
   "type": "module",
+  "description": "Cockpit HMI and ADAS visualisation portfolio project: a Three.js + Rapier driving demo being redeveloped into a TypeScript, React and Vite application.",
+  "license": "MIT",
+  "author": "HelongZhou",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Helongzhou/apex-cockpit.git"
+  },
+  "engines": {
+    "node": ">=22.12.0"
+  },
   "scripts": {
-    "start": "python -m http.server 8080",
-    "serve": "python -m http.server 8080",
-    "serve-node": "npx serve . -p 8080",
-    "serve-php": "php -S localhost:8080",
-    "dev": "python -m http.server 8080"
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 8080",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "serve": "python3 -m http.server 8080"
   },
   "keywords": [
     "threejs",
     "rapier",
-    "rapier3d",
-    "vue3",
-    "car-game",
-    "3d-racing",
-    "physics-engine",
-    "es6-modules",
-    "import-maps",
-    "component-architecture",
-    "cross-platform",
-    "touch-controls",
+    "typescript",
+    "react",
+    "vite",
+    "hmi",
+    "adas",
+    "automotive",
+    "cockpit",
+    "visualisation",
     "webgl",
-    "game-development",
-    "modern-javascript",
-    "responsive-design"
+    "portfolio"
   ],
-  "author": "Manuel Hintermayr",
-  "license": "MIT",
-  "engines": {
-    "node": ">=14.0.0",
-    "npm": ">=6.0.0"
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "0.20.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "three": "0.185.1"
   },
-  "browserslist": [
-    "Chrome >= 89",
-    "Firefox >= 108",
-    "Safari >= 16.4",
-    "Edge >= 89",
-    "iOS >= 16.4",
-    "Android >= 8"
-  ],
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/manuelhintermayr/three-js-car-example.git"
-  },
-  "bugs": {
-    "url": "https://github.com/manuelhintermayr/three-js-car-example/issues"
-  },
-  "homepage": "https://github.com/manuelhintermayr/three-js-car-example#readme"
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@types/three": "0.185.4",
+    "@vitejs/plugin-react": "6.1.2",
+    "typescript": "7.0.2",
+    "vite": "8.3.4",
+    "vitest": "5.0.4"
+  }
 }
