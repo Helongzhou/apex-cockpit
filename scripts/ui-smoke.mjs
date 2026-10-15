@@ -1,0 +1,148 @@
+#!/usr/bin/env node
+/**
+ * ui-smoke.mjs - Headless UI behaviour checks for the React port.
+ *
+ * Covers the interaction list that has to survive the Vue -> React migration (task C1's
+ * acceptance criterion AC1.4). Run against a built directory:
+ *
+ *   node scripts/ui-smoke.mjs [dir]          # default: dist
+ *
+ * Chromium is expected under `PLAYWRIGHT_BROWSERS_PATH` (default `<repo>/.playwright-browsers`).
+ */
+
+import { createServer } from 'node:http';
+import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { extname, join, resolve } from 'node:path';
+import process from 'node:process';
+
+process.env.PLAYWRIGHT_BROWSERS_PATH ??= join(process.cwd(), '.playwright-browsers');
+const { chromium } = await import('playwright');
+
+const MIME = {
+    '.html': 'text/html; charset=utf-8',
+    '.js': 'text/javascript; charset=utf-8',
+    '.css': 'text/css; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+    '.map': 'application/json; charset=utf-8',
+    '.glb': 'model/gltf-binary',
+    '.wasm': 'application/wasm',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg'
+};
+
+const root = resolve(process.argv[2] ?? 'dist');
+const server = createServer(async (request, response) => {
+    const url = new URL(request.url ?? '/', 'http://localhost');
+    let filePath = join(root, decodeURIComponent(url.pathname));
+    if (url.pathname.endsWith('/')) {
+        filePath = join(filePath, 'index.html');
+    }
+    if (!existsSync(filePath)) {
+        response.writeHead(404).end('not found');
+        return;
+    }
+    response.writeHead(200, { 'content-type': MIME[extname(filePath)] ?? 'application/octet-stream' });
+    response.end(await readFile(filePath));
+});
+await new Promise(ready => server.listen(0, '127.0.0.1', ready));
+const port = server.address().port;
+
+const browser = await chromium.launch({
+    args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--disable-gpu-sandbox']
+});
+
+const results = [];
+const check = (name, passed, detail = '') => {
+    results.push({ name, passed, detail });
+    console.log(`${passed ? 'PASS' : 'FAIL'}  ${name}${detail ? ` — ${detail}` : ''}`);
+};
+
+/** Desktop pass: panels, FPS badge, key highlights, debug toggle. */
+{
+    const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: 'load' });
+    await page.waitForSelector('#renderCanvas', { timeout: 30_000 });
+
+    check('canvas is rendered', await page.locator('#renderCanvas').count() === 1);
+    check('FPS badge is rendered', await page.locator('.fps-counter').count() === 1);
+    check('debug button is visible on desktop', await page.locator('.debug-button').isVisible());
+    check('panels start hidden', !(await page.locator('.panel.panel-left').isVisible()));
+
+    // F12 toggles the debug panels (with the two-phase display/animation classes).
+    await page.keyboard.press('F12');
+    await page.waitForTimeout(50);
+    const leftVisible = await page.locator('.panel.panel-left.visible').count();
+    check('F12 opens the debug panels', leftVisible === 1);
+
+    // The HUD shows the vehicle readouts.
+    const speedText = await page.locator('.panel-left .stat-value-large').first().innerText();
+    check('speed readout is present', /\d/.test(speedText), speedText.trim());
+
+    // Enter key highlight through the desktop controls.
+    await page.keyboard.down('Enter');
+    await page.waitForTimeout(50);
+    check('Enter key highlight reacts', await page.locator('.key-display.enter.active').count() === 1);
+    await page.keyboard.up('Enter');
+
+    // Key press drives the car: speed readout must grow after holding W.
+    await page.keyboard.down('w');
+    await page.waitForTimeout(2500);
+    const movedSpeed = await page.locator('.panel-left .stat-value-large').first().innerText();
+    await page.keyboard.up('w');
+    check('holding W increases speed', parseFloat(movedSpeed) > 0, `${speedText.trim()} -> ${movedSpeed.trim()}`);
+
+    // C toggles the cockpit view (surfaced through the desktop controls highlight).
+    await page.keyboard.down('c');
+    await page.waitForTimeout(50);
+    check('C key highlight reacts', await page.locator('.key-display.c.active').count() === 1);
+    await page.keyboard.up('c');
+
+    // Enter resets the run: the car returns to the spawn point (it drops in from y = 5, so
+    // the speed readout is non-zero right after a reset by design).
+    const statValue = index => page.locator('.panel-left .stat-box').nth(index).locator('.stat-value').innerText();
+    const beforeReset = { x: parseFloat(await statValue(1)), z: parseFloat(await statValue(3)) };
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(2500);
+    const afterReset = { x: parseFloat(await statValue(1)), z: parseFloat(await statValue(3)) };
+    check(
+        'Enter returns the car to the spawn point',
+        Math.abs(afterReset.x) < 1 && Math.abs(afterReset.z) < 1
+            && Math.abs(beforeReset.x) + Math.abs(beforeReset.z) > 1,
+        `${beforeReset.x},${beforeReset.z} -> ${afterReset.x},${afterReset.z}`
+    );
+
+    check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
+    await page.close();
+}
+
+/** Touch pass: the mobile controls appear once a coarse pointer is emulated. */
+{
+    const context = await browser.newContext({
+        viewport: { width: 900, height: 500 },
+        hasTouch: true,
+        isMobile: true
+    });
+    const page = await context.newPage();
+    await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: 'load' });
+    await page.waitForSelector('#renderCanvas', { timeout: 30_000 });
+    await page.touchscreen.tap(400, 250);
+    await page.waitForTimeout(200);
+
+    check('mobile controls appear on a touch device', await page.locator('.mobile-controls.visible').count() === 1);
+    check('joystick and four buttons exist', await page.locator('.joystick-inner').count() === 1
+        && await page.locator('.action-button').count() === 4);
+    check('desktop controls hide on a touch device', !(await page.locator('.desktop-controls.visible').isVisible()));
+    await context.close();
+}
+
+await browser.close();
+server.close();
+
+const failed = results.filter(result => !result.passed);
+console.log(`\n${results.length - failed.length}/${results.length} checks passed`);
+if (failed.length > 0) {
+    process.exitCode = 1;
+}
