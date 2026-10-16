@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { RAPIER, COLLISION_GROUPS, syncMeshWithBody } from './physics-world.js';
 import { loadCarModel, type CarModelData, type PivotPart, type WheelPart } from './car-model.js';
 import { createCarLights } from './car-lights.js';
+import { boxInertia, cylinderInertia, makeAckermann } from './math/vehicle-math.js';
 import type { CarVisualState } from './controls.js';
 import type { CockpitRig } from './follow-camera.js';
 
@@ -433,31 +434,4 @@ function createWheelBody(world: RAPIER.World, position: { x: number; y: number; 
     return body;
 }
 
-/** Principal inertia of a solid cylinder whose axis points along X */
-function cylinderInertia(mass: number, radius: number, length: number): { x: number; y: number; z: number } {
-    const aroundAxis = 0.5 * mass * radius * radius;
-    const acrossAxis = mass * (3 * radius * radius + length * length) / 12;
-    return { x: aroundAxis, y: acrossAxis, z: acrossAxis };
-}
-
-/** Principal inertia of a solid box, used as approximation for the car body */
-function boxInertia(mass: number, size: { x: number; y: number; z: number }): { x: number; y: number; z: number } {
-    const factor = mass / 12;
-    return {
-        x: factor * (size.y * size.y + size.z * size.z),
-        y: factor * (size.x * size.x + size.z * size.z),
-        z: factor * (size.x * size.x + size.y * size.y)
-    };
-}
-
 /** Ackermann steering derived from the model's wheelbase and track: the inner wheel turns sharper */
-function makeAckermann(model: CarModelData): (averageAngle: number) => [number, number] {
-    const wheelbase = 2 * model.halfWheelbase;
-    const trackWidth = 2 * model.halfTrack;
-    return (averageAngle) => {
-        const averageRadius = wheelbase / Math.tan(averageAngle);
-        const innerRadius = averageRadius - trackWidth / 2;
-        const outerRadius = averageRadius + trackWidth / 2;
-        return [Math.atan(wheelbase / innerRadius), Math.atan(wheelbase / outerRadius)];
-    };
-}

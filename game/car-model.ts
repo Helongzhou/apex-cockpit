@@ -7,6 +7,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 // would not be copied into dist/.
 import CAR_MODEL_URL from './models/car.glb?url';
 import { cacheOnce } from './loading.js';
+import { filterTriangles, normalizeNodeName } from './math/geometry.js';
 
 // Half-track the physics rig is tuned for; the model is scaled uniformly so its wheels span it.
 // Matching the track (not the wheelbase) keeps the original roll-over resistance.
@@ -159,11 +160,6 @@ function createLoader(): GLTFLoader {
     return loader;
 }
 
-/** GLTFLoader strips the dots from node names, so both sides are compared without them */
-function normalizeNodeName(name: string): string {
-    return name.replace(/\./g, '');
-}
-
 function classifyMeshes(root: THREE.Object3D): MeshBuckets {
     const lookup = new Map<string, PartKey>();
     for (const [part, names] of Object.entries(PART_NAMES)) {
@@ -235,41 +231,6 @@ function finishWheel(geometry: THREE.BufferGeometry, corner: string): WheelPart 
     return { corner, geometry: markShared(geometry), position, radius: Math.max(size.y, size.z) / 2 };
 }
 
-/** Keeps the triangles whose centroid (cx, cy, cz) passes the predicate, as a fresh non-indexed geometry. */
-function filterTriangles(
-    geometry: THREE.BufferGeometry,
-    keep: (cx: number, cy: number, cz: number) => boolean
-): THREE.BufferGeometry {
-    const src = geometry.attributes;
-    const out: { position: number[]; normal: number[]; uv: number[] } = { position: [], normal: [], uv: [] };
-    const pos = src.position;
-    for (let t = 0; t < pos.count; t += 3) {
-        const cx = (pos.getX(t) + pos.getX(t + 1) + pos.getX(t + 2)) / 3;
-        const cy = (pos.getY(t) + pos.getY(t + 1) + pos.getY(t + 2)) / 3;
-        const cz = (pos.getZ(t) + pos.getZ(t + 1) + pos.getZ(t + 2)) / 3;
-        if (!keep(cx, cy, cz)) {
-            continue;
-        }
-        for (let v = t; v < t + 3; v++) {
-            out.position.push(pos.getX(v), pos.getY(v), pos.getZ(v));
-            if (src.normal) {
-                out.normal.push(src.normal.getX(v), src.normal.getY(v), src.normal.getZ(v));
-            }
-            if (src.uv) {
-                out.uv.push(src.uv.getX(v), src.uv.getY(v));
-            }
-        }
-    }
-    const result = new THREE.BufferGeometry();
-    result.setAttribute('position', new THREE.Float32BufferAttribute(out.position, 3));
-    if (src.normal) {
-        result.setAttribute('normal', new THREE.Float32BufferAttribute(out.normal, 3));
-    }
-    if (src.uv) {
-        result.setAttribute('uv', new THREE.Float32BufferAttribute(out.uv, 2));
-    }
-    return result;
-}
 
 function buildSteeringWheel(meshes: THREE.Mesh[], bake: THREE.Matrix4): SteeringWheelPart {
     const ring = meshes.find(mesh => mesh.name.startsWith('Torus')) ?? meshes[0];

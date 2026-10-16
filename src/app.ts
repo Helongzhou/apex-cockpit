@@ -11,7 +11,7 @@ import type { GameHost } from '../game/types.js';
 import { createStore, type Store } from './state';
 
 const KNOCKABLE_BOX_COUNT = 5;
-const NO_DIRECTION = '—';
+import { NO_DIRECTION } from '../game/math/input-mapping.js';
 
 const emptyBoxes = () => Array.from({ length: KNOCKABLE_BOX_COUNT }, () => ({ knocked: false }));
 

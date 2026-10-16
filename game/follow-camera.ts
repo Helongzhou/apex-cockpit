@@ -1,6 +1,7 @@
 // follow-camera.ts - Port of the Babylon.js FollowCamera including the mouse orbit control
 import * as THREE from 'three';
 import { listen, releaseAll, type ListenerHandle } from './listeners.js';
+import { clampSymmetric } from './math/vehicle-math.js';
 
 const FIELD_OF_VIEW_DEGREES = 45.8; // Babylon.js default camera fov (0.8 rad)
 const COCKPIT_FIELD_OF_VIEW_DEGREES = 74; // wide driver-POV: full windshield above, wheel + footwell below
@@ -102,9 +103,9 @@ export class FollowCamera {
         }
 
         const velocity = this.computeGoalPosition(this.scratch.goal).sub(this.camera.position);
-        velocity.x = clampSpeed(velocity.x * FOLLOW.cameraAcceleration * 2);
-        velocity.y = clampSpeed(velocity.y * FOLLOW.cameraAcceleration);
-        velocity.z = clampSpeed(velocity.z * FOLLOW.cameraAcceleration * 2);
+        velocity.x = clampSymmetric(velocity.x * FOLLOW.cameraAcceleration * 2, FOLLOW.maxCameraSpeed);
+        velocity.y = clampSymmetric(velocity.y * FOLLOW.cameraAcceleration, FOLLOW.maxCameraSpeed);
+        velocity.z = clampSymmetric(velocity.z * FOLLOW.cameraAcceleration * 2, FOLLOW.maxCameraSpeed);
 
         this.camera.position.add(velocity);
         // The single shared camera keeps the car's roll from the cockpit's up vector; the bird's-eye
@@ -146,6 +147,3 @@ export class FollowCamera {
     }
 }
 
-function clampSpeed(value: number): number {
-    return THREE.MathUtils.clamp(value, -FOLLOW.maxCameraSpeed, FOLLOW.maxCameraSpeed);
-}

@@ -2,10 +2,11 @@
 import RAPIER from '@dimforge/rapier3d';
 import type { Object3D } from 'three';
 import { cacheOnce } from './loading.js';
+import { PHYSICS_TIMESTEP, PhysicsStepper } from './math/physics-stepper.js';
+
+export { PhysicsStepper };
 
 const GRAVITY = { x: 0, y: -150, z: 0 };
-const PHYSICS_TIMESTEP = 1 / 120;
-const MAX_STEPS_PER_FRAME = 8; // keeps the simulation in real time down to 15 fps
 const SOLVER_ITERATIONS = 16; // keeps the jointed car straight even on the hard spawn landing
 const UNITS_PER_METER = 8; // the car is ~28 units long, so 1 meter is roughly 8 units
 
@@ -40,33 +41,6 @@ export function createPhysicsWorld(): RAPIER.World {
     return world;
 }
 
-/**
- * Advances the world with a fixed timestep, catching up on the elapsed frame time
- */
-export class PhysicsStepper {
-    world: RAPIER.World;
-    accumulator: number;
-    /** Simulated seconds so far, independent of frame rate and tab visibility */
-    elapsedSeconds: number;
-
-    constructor(world: RAPIER.World) {
-        this.world = world;
-        this.accumulator = 0;
-        this.elapsedSeconds = 0;
-    }
-
-    step(deltaSeconds: number): void {
-        this.accumulator += Math.min(deltaSeconds, PHYSICS_TIMESTEP * MAX_STEPS_PER_FRAME);
-
-        let steps = 0;
-        while (this.accumulator >= PHYSICS_TIMESTEP && steps < MAX_STEPS_PER_FRAME) {
-            this.world.step();
-            this.accumulator -= PHYSICS_TIMESTEP;
-            this.elapsedSeconds += PHYSICS_TIMESTEP;
-            steps++;
-        }
-    }
-}
 
 /**
  * Copies the rigid body transform onto a Three.js object

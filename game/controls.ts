@@ -2,6 +2,7 @@
 import type { Car } from './car.js';
 import type { GameHost, TouchControls } from './types.js';
 import { listen, releaseAll, type ListenerHandle } from './listeners.js';
+import { describeDirection, type Action } from './math/input-mapping.js';
 
 const MAX_SPEED = 80;
 const REVERSE_SPEED_LIMIT = MAX_SPEED * 0.5;
@@ -10,10 +11,6 @@ const NATURAL_SLOWDOWN = 0.92;
 const MAX_STEERING_ANGLE = Math.PI / 4;
 const STEERING_STEP = 0.05;
 const STEERING_CENTERING = 0.85;
-const NO_DIRECTION = '—';
-
-type Action = keyof TouchControls;
-
 const KEY_ACTIONS = new Map<string, Action>([
     ['w', 'forward'], ['W', 'forward'], ['ArrowUp', 'forward'],
     ['s', 'backward'], ['S', 'backward'], ['ArrowDown', 'backward'],
@@ -23,15 +20,6 @@ const KEY_ACTIONS = new Map<string, Action>([
     [' ', 'jump']
 ]);
 const RESET_KEY = 'Enter';
-
-const DIRECTION_LABELS: ReadonlyArray<readonly [Action, string]> = [
-    ['forward', '↑ Forward'],
-    ['backward', '↓ Backward'],
-    ['left', '← Left'],
-    ['right', '→ Right'],
-    ['brake', '🚗 Brake'],
-    ['jump', '🚀 Jump']
-];
 
 export interface CarVisualState {
     steerAngle: number;
@@ -157,7 +145,3 @@ export class CarControls {
     }
 }
 
-function describeDirection(input: TouchControls): string {
-    const labels = DIRECTION_LABELS.filter(([action]) => input[action]).map(([, label]) => label);
-    return labels.length > 0 ? labels.join(' + ') : NO_DIRECTION;
-}
