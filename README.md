@@ -404,6 +404,22 @@ src/state.ts  ◄── 唯一的跨层接缝：game/ 写 GameHost，React 只�
 | 起跳是电平触发 | 按住 0.1 s：144 Hz 加 14 次冲量、30 Hz 只有 3 次 | 改为每秒冲量预算（60/s = 原 60 fps 手感） |
 | 重置期间无任何状态反馈 | 重置窗口内按下的输入落在已销毁的控制器上被静默丢弃 | 重置期间进入可见 `loading` 态 |
 
+### 13.4 数字仪表（已完成）
+
+DOM/CSS overlay，**不引入第二个渲染上下文**（页面仍只有 1 个 canvas，仪表目录内无 `getContext`/`<canvas>`）。
+
+| 组件 | 内容 |
+|---|---|
+| `SpeedGauge` | 指针式车速表：0–40 km/h 刻度（demo 物理上限 36 km/h）、指针角度 = `speedToNeedleDegrees(kmh)`、附 m/s 副读数；静态表盘 `memo` 化 |
+| `GearIndicator` | P/R/N/D，高亮来自物理状态判定的挡位 |
+| `PowerBar` | 中零功率条，正=驱动 / 负=制动回收，`transform: scaleX()` 驱动 |
+| `AdasStatusIcons` | 只显示真实信号（碰撞告警 / 倒车 / 驻车 / 行驶中 / 计时中）；迭代 3 的 ADAS 图层接入后在此扩展 |
+| `StageSwitcher` | 舞台切换；本迭代只有影棚，D3 加入高速后按钮自动出现 |
+
+浏览器实测（`npm run cluster` 10/10）：车速表与 HUD 同值、起步挡位 N→D、加速功率 +11 kW、状态图标随状态变化；行驶中仪表盒模型完全不变（402×196 → 402×196，即只改 transform/文本）。
+
+**关于"20 Hz 无掉帧"的诚实结论**：判据是 p95 增量 ≤0.5 ms，但本仓库的自动化环境用 SwiftShader 软件光栅化（~12 fps、帧时间 ~80 ms），交错 4 轮测得的跨轮噪声是 p50 3.1 ms / p95 10.4 ms —— **比判据大 1–2 个数量级，无法判定**（实测甚至出现"仪表开更快 6 ms"这种不可能的结果，说明信号是机器负载漂移）。因此该项标注为不可判定，并给出结构性论证：store 写入限流 20 Hz（非每帧）、静态表盘 memo 化、仅文本/transform/opacity 变化。
+
 ### 13.4 金标准基线（回归工作流）
 
 `baselines/physics-golden.json`（601 帧固定步长物理快照）+ `npm run golden` 录制、`npm run deterministic -- --compare` 比对。**有意改变行为时必须同提交重录并说明原因，禁止放宽容差去凑绿门禁**；迭代 1 的归档上游基线继续作为历史证据保留。
