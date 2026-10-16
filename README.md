@@ -449,6 +449,14 @@ DOM/CSS overlay，**不引入第二个渲染上下文**（页面仍只有 1 个 
 
 ## 十四、迭代 3 交付说明（进行中）
 
+### 发布通道
+
+静态产物已发布到 **`gh-pages` 分支**（分支内容只有 `index.html` / `assets/` / `.nojekyll`，无源码）。
+
+- 启用方式：仓库 **Settings → Pages → Source: Deploy from a branch → `gh-pages` / `root`**，之后访问 `https://helongzhou.github.io/apex-cockpit/`。
+- 重新发布：`npm run build`，然后把 `dist/` 内容推到 `gh-pages`（用临时目录 `git init` 后 `git push -f origin gh-pages`，避免把源码树带进发布分支）。
+- 产物自检：`dist/` 内无任何 CDN 引用（`grep -rlo "cdn.jsdelivr.net\|unpkg.com" dist/` 为空），离线可用。
+
 ### 演示资产
 
 | 文件 | 内容 |
