@@ -10,7 +10,13 @@ export default defineConfig({
         include: ['tests/**/*.test.ts'],
         coverage: {
             provider: 'v8',
-            include: ['game/math/**/*.ts', 'game/loading.ts', 'src/state.ts'],
+            include: [
+                'game/math/**/*.ts',
+                'game/loading.ts',
+                'game/vehicle-state.ts',
+                'game/state-bus.ts',
+                'src/state.ts'
+            ],
             reporter: ['text', 'text-summary']
         }
     }
