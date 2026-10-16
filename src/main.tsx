@@ -18,6 +18,7 @@ import '../css/mobile-controls.css';
 import '../css/desktop-controls.css';
 import '../css/fps-counter.css';
 import '../css/runtime-overlay.css';
+import '../css/cluster.css';
 
 const { store, host } = createGameHost();
 const options = createDeterministicOptions();

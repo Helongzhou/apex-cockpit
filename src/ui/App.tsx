@@ -12,6 +12,8 @@ import { FpsBadge } from './FpsBadge';
 import { InfoPanel } from './InfoPanel';
 import { MobileControls } from './MobileControls';
 import { RuntimeOverlay } from './RuntimeOverlay';
+import { Cluster } from './cluster/Cluster';
+import { StageSwitcher } from './scene-switcher';
 
 export interface AppProps {
     store: Store<GameHost>;
@@ -25,7 +27,9 @@ export interface AppProps {
  * layout, then the control overlays.
  */
 export function App({ store, host, options }: AppProps) {
-    const { isTouchDevice } = useGameState(store);
+    const { isTouchDevice, stage } = useGameState(store);
+    // `?cluster=off` exists so the cluster's cost can be measured against the same build.
+    const clusterEnabled = new URLSearchParams(window.location.search).get('cluster') !== 'off';
     useTouchDevice(host);
 
     useEffect(() => {
@@ -65,6 +69,8 @@ export function App({ store, host, options }: AppProps) {
             <canvas id="renderCanvas" />
             <DesktopControls isTouchDevice={isTouchDevice} />
             <MobileControls host={host} isTouchDevice={isTouchDevice} />
+            {clusterEnabled ? <Cluster store={store} /> : null}
+            <StageSwitcher host={host} stage={stage} />
             <RuntimeOverlay store={store} />
         </>
     );

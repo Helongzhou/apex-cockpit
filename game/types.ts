@@ -46,6 +46,29 @@ export interface RuntimeState {
     detail: string;
 }
 
+export type Gear = 'P' | 'R' | 'N' | 'D';
+
+/**
+ * The cluster snapshot: written from the state bus at the HUD rate (20 Hz), never at frame rate.
+ * React re-renders on every store change, so subscribing the UI to the 60 Hz bus would tie the
+ * render frequency to the frame rate (see `.trellis/spec/frontend/state-management.md`).
+ */
+export interface VehicleSnapshot {
+    speedMps: number;
+    speedKmh: number;
+    gear: Gear;
+    /** Drive power in kW; negative while braking (energy recovered). */
+    powerKw: number;
+    accelLongitudinal: number;
+    accelLateral: number;
+    yawRate: number;
+    steerAngleDeg: number;
+    /** True on the frame a collision was detected; the cluster flashes its warning icon. */
+    collision: boolean;
+}
+
+export type StageId = 'studio' | 'highway';
+
 export interface GameHost {
     /** Written by `FpsMeter` every 500 ms. */
     fps: number;
@@ -61,6 +84,11 @@ export interface GameHost {
     knockedBoxes: number;
     raceTime: number;
     isRacing: boolean;
+    /** Cluster snapshot, written field by field from the bus at the HUD rate. */
+    vehicle: VehicleSnapshot;
+    /** Active stage; the switcher writes it through `setStage`. */
+    stage: StageId;
+    setStage(stage: StageId): void;
     /** Owned by the UI layer, read by `CarControls.combineInputs`. */
     isTouchDevice: boolean;
     touchControls: TouchControls;

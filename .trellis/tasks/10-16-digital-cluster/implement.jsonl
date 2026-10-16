@@ -1,0 +1,4 @@
+{"file": "docs/superpowers/specs/2026-10-15-iteration-plan.md", "reason": "迭代 2 仪表交付物与验收（§6.1/§6.2）"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "仪表必须走 20 Hz 快照而非 60 Hz 总线：状态归属约定"}
+{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "组件职责、className 与样式放置约定"}
+{"file": ".trellis/spec/frontend/quality-guidelines.md", "reason": "提交前必跑命令与禁止模式"}

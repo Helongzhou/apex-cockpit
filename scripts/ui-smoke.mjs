@@ -71,6 +71,8 @@ const check = (name, passed, detail = '') => {
 
     check('canvas is rendered', await page.locator('#renderCanvas').count() === 1);
     check('FPS badge is rendered', await page.locator('.fps-counter').count() === 1);
+    check('digital cluster is mounted', await page.locator('.cluster').count() === 1);
+    check('cluster has no canvas of its own', await page.locator('.cluster canvas').count() === 0);
     check('debug button is visible on desktop', await page.locator('.debug-button').isVisible());
     check('panels start hidden', !(await page.locator('.panel.panel-left').isVisible()));
 

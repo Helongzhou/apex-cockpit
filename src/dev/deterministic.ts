@@ -53,6 +53,8 @@ declare global {
     interface Window {
         __APEX_DETERMINISTIC?: DeterministicConfig;
         __APEX_DUMP?: DeterministicRow[];
+        /** Frames rendered so far in a deterministic run (progress reporting). */
+        __APEX_FRAME_COUNT?: number;
     }
 }
 
@@ -105,6 +107,7 @@ export function createDeterministicOptions(): GameOptions | undefined {
             }
         },
         onFrame: (frame, session) => {
+            window.__APEX_FRAME_COUNT = frame;
             if (session !== null) {
                 rows.push(sample(frame, session));
             }

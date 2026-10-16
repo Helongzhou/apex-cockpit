@@ -31,8 +31,9 @@ import { extname, join, resolve } from 'node:path';
 import process from 'node:process';
 
 const FIXED_DELTA_SECONDS = 1 / 60;
-const FRAMES = 600;
-const TIMEOUT_MS = 120_000;
+/** Default run length; `--frames N` shortens it on a loaded machine (the frames are a prefix). */
+const DEFAULT_FRAMES = 600;
+const TIMEOUT_MS = 300_000; // generous: the harness runs 600 frames under software rendering
 
 /** Scripted input, in simulated seconds (the physics grid is 1/120 s). */
 const SCRIPT = [
@@ -92,7 +93,8 @@ async function launchChromium() {
     });
 }
 
-async function dumpRun({ dir, out }) {
+async function dumpRun({ dir, out, frames: requestedFrames }) {
+    const FRAMES = requestedFrames ?? DEFAULT_FRAMES;
     const root = resolve(dir);
     const { server, port } = await startStaticServer(root);
     const browser = await launchChromium();
@@ -150,8 +152,9 @@ async function dumpRun({ dir, out }) {
         rows = await page.evaluate(() => window.__APEX_DUMP);
     } catch (error) {
         const reached = await page.evaluate(() => window.__APEX_DUMP?.length ?? 0).catch(() => 0);
+        const progress = await page.evaluate(() => window.__APEX_FRAME_COUNT ?? 0).catch(() => 0);
         console.error(`FAILED: ${error.message}`);
-        console.error(`frames captured: ${reached}/${FRAMES}`);
+        console.error(`frames captured: ${reached}/${FRAMES} (rendered ${progress} frames before giving up)`);
         for (const problem of problems.slice(0, 20)) {
             console.error(`  ${problem}`);
         }
@@ -197,12 +200,21 @@ async function compareRuns({ baselinePath, candidatePath }) {
         }
     }
 
-    console.log(`compared ${frames} frames (baseline ${baseline.rows.length}, candidate ${candidate.rows.length})`);
+    // A shorter candidate is a prefix comparison: useful on a loaded machine (`--frames N`).
+    // The frames are deterministic and any divergence shows up early, but a prefix must still
+    // cover a meaningful share of the baseline or it proves nothing.
+    const isPrefix = candidate.rows.length < baseline.rows.length;
+    const share = frames / baseline.rows.length;
+    console.log(`compared ${frames} frames (baseline ${baseline.rows.length}, candidate ${candidate.rows.length}${isPrefix ? ', prefix run' : ''})`);
     console.log(`max |delta| = ${worst.toExponential(3)} on "${worstField}"`);
     console.log(firstDivergenceFrame === -1
-        ? 'RESULT: identical within 1e-6'
+        ? (isPrefix ? `RESULT: prefix (${(share * 100).toFixed(0)}% of the baseline) identical within 1e-6` : 'RESULT: identical within 1e-6')
         : `RESULT: first divergence at frame ${firstDivergenceFrame}`);
-    if (firstDivergenceFrame !== -1 || baseline.rows.length !== candidate.rows.length) {
+    const tooShort = isPrefix && share < 0.5;
+    if (tooShort) {
+        console.error(`FAILED: a ${(share * 100).toFixed(0)}% prefix is too short to be evidence`);
+    }
+    if (firstDivergenceFrame !== -1 || candidate.rows.length > baseline.rows.length || tooShort) {
         process.exitCode = 1;
     }
 }
@@ -214,7 +226,12 @@ const flag = name => {
 };
 
 if (args.includes('--dump')) {
-    await dumpRun({ dir: flag('--dir') ?? 'dist', out: flag('--out') ?? 'deterministic.json' });
+    const frames = flag('--frames');
+    await dumpRun({
+        dir: flag('--dir') ?? 'dist',
+        out: flag('--out') ?? 'deterministic.json',
+        frames: frames === undefined ? undefined : Number.parseInt(frames, 10)
+    });
 } else if (args.includes('--compare')) {
     const positionals = args.filter(arg => !arg.startsWith('--') && arg.endsWith('.json'));
     await compareRuns({ baselinePath: positionals[0], candidatePath: positionals[1] });

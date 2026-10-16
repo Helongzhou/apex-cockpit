@@ -120,6 +120,18 @@ export class Telemetry {
         host.rotation = ((state.yawRad * 180) / Math.PI) % FULL_CIRCLE_DEGREES;
         host.maxSpeed = this.peakSpeedKmh;
 
+        // Cluster snapshot: field-by-field so the store only notifies for values that changed.
+        const vehicle = host.vehicle;
+        vehicle.speedMps = state.speedMps;
+        vehicle.speedKmh = this.declaredSpeedKmh;
+        vehicle.gear = state.gear;
+        vehicle.powerKw = state.powerKw;
+        vehicle.accelLongitudinal = state.accelLongitudinal;
+        vehicle.accelLateral = state.accelLateral;
+        vehicle.yawRate = state.yawRate;
+        vehicle.steerAngleDeg = state.steerAngleDeg;
+        vehicle.collision = state.collision || this.justCollided;
+
         if (this.raceStarted) {
             this.host.raceTime = (Date.now() - this.raceStartTime) / 1000;
         }
