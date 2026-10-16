@@ -5,3 +5,4 @@ dist/
 .codex/
 .playwright-browsers/
 deterministic-*.json
+coverage/
