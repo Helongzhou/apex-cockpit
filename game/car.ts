@@ -4,6 +4,7 @@ import { RAPIER, COLLISION_GROUPS, syncMeshWithBody } from './physics-world.js';
 import { loadCarModel, type CarModelData, type PivotPart, type WheelPart } from './car-model.js';
 import { createCarLights } from './car-lights.js';
 import { boxInertia, cylinderInertia, makeAckermann } from './math/vehicle-math.js';
+import { smoothingFactor } from './math/frame-rate.js';
 import type { CarVisualState } from './controls.js';
 import type { CockpitRig } from './follow-camera.js';
 
@@ -175,19 +176,19 @@ export class Car {
      * because their meshes follow the physics wheel bodies. The gear lever rocks in every view, the pedals
      * only in the interior view, where they are actually visible.
      */
-    updateVisuals(input: CarVisualState, inCockpit: boolean): void {
+    updateVisuals(input: CarVisualState, inCockpit: boolean, deltaSeconds: number): void {
         this.cockpit.steeringWheel.setRotationFromAxisAngle(this.cockpit.steeringAxis, -input.steerAngle * STEERING_WHEEL_RATIO);
-        this.animateCockpitControls(input, inCockpit);
+        this.animateCockpitControls(input, inCockpit, deltaSeconds);
     }
 
     /** Presses each pedal on its own input and rocks the gear lever (fore = accelerate, aft = brake/reverse). */
-    animateCockpitControls(input: CarVisualState, inCockpit: boolean): void {
+    animateCockpitControls(input: CarVisualState, inCockpit: boolean, deltaSeconds: number): void {
         const gasTarget = inCockpit && (input.forward || input.backward) ? PEDAL_PRESS_ANGLE : 0;
-        this.gasPress += (gasTarget - this.gasPress) * PEDAL_SMOOTHING;
+        this.gasPress += (gasTarget - this.gasPress) * smoothingFactor(PEDAL_SMOOTHING, deltaSeconds);
         this.cockpit.gasPedalGroup.rotation.x = this.gasPress;
 
         const brakeTarget = inCockpit && input.brake ? PEDAL_PRESS_ANGLE : 0;
-        this.brakePress += (brakeTarget - this.brakePress) * PEDAL_SMOOTHING;
+        this.brakePress += (brakeTarget - this.brakePress) * smoothingFactor(PEDAL_SMOOTHING, deltaSeconds);
         this.cockpit.brakePedalGroup.rotation.x = this.brakePress;
 
         // The gear lever moves in every view (like the steering wheel), not only in the cockpit.
@@ -197,7 +198,7 @@ export class Car {
         } else if (input.brake || input.backward) {
             shiftTarget = -SHIFTER_TILT_ANGLE;
         }
-        this.shiftPos += (shiftTarget - this.shiftPos) * SHIFTER_SMOOTHING;
+        this.shiftPos += (shiftTarget - this.shiftPos) * smoothingFactor(SHIFTER_SMOOTHING, deltaSeconds);
         this.cockpit.shifterGroup.rotation.x = this.shiftPos;
     }
 }

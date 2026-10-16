@@ -24,6 +24,12 @@ export interface GameOptions {
      * sample physics state instead of the 20 Hz-throttled HUD.
      */
     onFrame?: (frameIndex: number, session: GameSession | null) => void;
+    /**
+     * Called after every physics substep with the simulated time so far. Input driven from here
+     * lands on the physics grid at any render rate, which is what makes a comparison across
+     * 30/60/144 Hz exact (see `scripts/frame-rate-compare.mjs`).
+     */
+    onSubstep?: (elapsedSeconds: number) => void;
 }
 
 let canvas: HTMLCanvasElement;
@@ -263,7 +269,7 @@ function renderFrame(): void {
     // cover the main pass, the bloom passes, the shadow pass and the reflection probe.
     renderer.info.reset();
     requestShadowUpdate(renderer);
-    session?.update(gameOptions.fixedDeltaSeconds ?? timer.getDelta());
+    session?.update(gameOptions.fixedDeltaSeconds ?? timer.getDelta(), gameOptions.onSubstep);
     glowComposer.render();
     fpsMeter.tick();
     frameIndex += 1;

@@ -10,12 +10,16 @@
  * With no injected config this module is inert and the app behaves normally.
  */
 
+import * as THREE from 'three';
 import type { GameOptions } from '../../game/three-game.js';
 import type { GameSession } from '../../game/game-session.js';
 
+/** Reused so sampling does not allocate on every frame. */
+const followScratch = new THREE.Vector3();
+
 export interface DeterministicStep {
-    /** 1-based frame index at which the key event is dispatched. */
-    frame: number;
+    /** Simulated time (seconds) at which the key event is dispatched. */
+    t: number;
     /** `KeyboardEvent.key` value, e.g. "w", "a", " " or "Enter". */
     key: string;
     down: boolean;
@@ -37,6 +41,12 @@ export interface DeterministicRow {
     vx: number;
     vy: number;
     vz: number;
+    /** Motor target the control layer is feeding the drive joints (world units/s). */
+    motor: number;
+    /** Steering angle the control layer is feeding the steering joints (radians). */
+    steer: number;
+    /** Camera follow error: distance between the camera and its goal position. */
+    camError: number;
 }
 
 declare global {
@@ -52,6 +62,9 @@ const round = (value: number): number => Math.round(value * 1e6) / 1e6;
 function sample(frame: number, session: GameSession): DeterministicRow {
     const position = session.car.position;
     const velocity = session.car.linearVelocity();
+    const follow = session.followCamera;
+    // The camera has no physics feedback, so its follow error is a clean control-loop metric.
+    const camError = follow.computeGoalPosition(followScratch).distanceTo(follow.camera.position);
     return {
         frame,
         elapsed: round(session.stepper.elapsedSeconds),
@@ -61,7 +74,10 @@ function sample(frame: number, session: GameSession): DeterministicRow {
         yaw: round(session.car.yaw()),
         vx: round(velocity.x),
         vy: round(velocity.y),
-        vz: round(velocity.z)
+        vz: round(velocity.z),
+        motor: round(session.controls.currentSpeed),
+        steer: round(session.controls.currentSteeringAngle),
+        camError: round(camError)
     };
 }
 
@@ -76,17 +92,19 @@ export function createDeterministicOptions(): GameOptions | undefined {
     }
 
     const rows: DeterministicRow[] = [];
-    const pending = [...config.script].sort((a, b) => a.frame - b.frame);
+    const pending = [...config.script].sort((a, b) => a.t - b.t);
 
     return {
         fixedDeltaSeconds: config.fixedDeltaSeconds,
-        onFrame: (frame, session) => {
-            // Keys are dispatched at the end of the frame, so they take effect on the next
-            // frame's `CarControls.update()` in both harness runs.
-            while (pending.length > 0 && pending[0].frame <= frame) {
+        // Input is injected on the physics grid, not on render-frame boundaries: a 144 Hz run and
+        // a 30 Hz run then see exactly the same input timeline.
+        onSubstep: (elapsedSeconds) => {
+            while (pending.length > 0 && pending[0].t <= elapsedSeconds) {
                 const step = pending.shift() as DeterministicStep;
                 window.dispatchEvent(new KeyboardEvent(step.down ? 'keydown' : 'keyup', { key: step.key }));
             }
+        },
+        onFrame: (frame, session) => {
             if (session !== null) {
                 rows.push(sample(frame, session));
             }

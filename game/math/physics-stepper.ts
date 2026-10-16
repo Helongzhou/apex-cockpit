@@ -29,11 +29,20 @@ export class PhysicsStepper {
         this.elapsedSeconds = 0;
     }
 
-    step(deltaSeconds: number): void {
+    /**
+     * Advances the world with a fixed timestep, catching up on the elapsed frame time.
+     *
+     * `onSubstep` runs **before each** `world.step()` with the fixed timestep: driving the control
+     * layer from here (instead of once per rendered frame) is what makes the simulation
+     * frame-rate independent, because then the inputs evolve on the same 120 Hz grid at any
+     * render rate.
+     */
+    step(deltaSeconds: number, onSubstep?: (fixedDeltaSeconds: number) => void): void {
         this.accumulator += Math.min(deltaSeconds, PHYSICS_TIMESTEP * MAX_STEPS_PER_FRAME);
 
         let steps = 0;
         while (this.accumulator >= PHYSICS_TIMESTEP && steps < MAX_STEPS_PER_FRAME) {
+            onSubstep?.(PHYSICS_TIMESTEP);
             this.world.step();
             this.accumulator -= PHYSICS_TIMESTEP;
             this.elapsedSeconds += PHYSICS_TIMESTEP;

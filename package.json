@@ -23,7 +23,9 @@
     "smoke": "node scripts/ui-smoke.mjs dist",
     "stability": "node scripts/stability-check.mjs dist",
     "deterministic": "node scripts/compare-deterministic.mjs",
-    "serve": "python3 -m http.server 8080"
+    "serve": "python3 -m http.server 8080",
+    "frame-rate": "node scripts/frame-rate-compare.mjs dist",
+    "golden": "node scripts/compare-deterministic.mjs --dump --dir dist --out baselines/physics-golden.json"
   },
   "keywords": [
     "threejs",

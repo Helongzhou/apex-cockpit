@@ -1,7 +1,7 @@
 // follow-camera.ts - Port of the Babylon.js FollowCamera including the mouse orbit control
 import * as THREE from 'three';
 import { listen, releaseAll, type ListenerHandle } from './listeners.js';
-import { clampSymmetric } from './math/vehicle-math.js';
+import { clampStep, smoothingFactor } from './math/frame-rate.js';
 
 const FIELD_OF_VIEW_DEGREES = 45.8; // Babylon.js default camera fov (0.8 rad)
 const COCKPIT_FIELD_OF_VIEW_DEGREES = 74; // wide driver-POV: full windshield above, wheel + footwell below
@@ -93,7 +93,7 @@ export class FollowCamera {
         this.camera.updateProjectionMatrix();
     }
 
-    update(): void {
+    update(deltaSeconds: number): void {
         if (!this.lockedTarget) {
             return;
         }
@@ -103,9 +103,11 @@ export class FollowCamera {
         }
 
         const velocity = this.computeGoalPosition(this.scratch.goal).sub(this.camera.position);
-        velocity.x = clampSymmetric(velocity.x * FOLLOW.cameraAcceleration * 2, FOLLOW.maxCameraSpeed);
-        velocity.y = clampSymmetric(velocity.y * FOLLOW.cameraAcceleration, FOLLOW.maxCameraSpeed);
-        velocity.z = clampSymmetric(velocity.z * FOLLOW.cameraAcceleration * 2, FOLLOW.maxCameraSpeed);
+        // Time-based follow: the upstream per-frame factors made the camera converge 2.4× faster
+        // at 144 Hz than at 60 Hz (findings F1-F4).
+        velocity.x = clampStep(velocity.x * smoothingFactor(FOLLOW.cameraAcceleration, deltaSeconds) * 2, FOLLOW.maxCameraSpeed, deltaSeconds);
+        velocity.y = clampStep(velocity.y * smoothingFactor(FOLLOW.cameraAcceleration, deltaSeconds), FOLLOW.maxCameraSpeed, deltaSeconds);
+        velocity.z = clampStep(velocity.z * smoothingFactor(FOLLOW.cameraAcceleration, deltaSeconds) * 2, FOLLOW.maxCameraSpeed, deltaSeconds);
 
         this.camera.position.add(velocity);
         // The single shared camera keeps the car's roll from the cockpit's up vector; the bird's-eye

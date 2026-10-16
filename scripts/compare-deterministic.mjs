@@ -5,14 +5,20 @@
  * The migration must not change observable behaviour, so this script runs a scripted input
  * sequence with a **fixed** timestep and compares the sampled physics state frame by frame.
  *
+ * Two baselines are in play:
+ *   1. `baselines/physics-golden.json` - the committed golden master (iteration 2 onward). A
+ *      fresh dump must match it exactly; if a change is *intentionally* behavioural, re-record
+ *      it in the same commit and say why in the task record. Never relax the tolerance to make
+ *      the gate green.
+ *   2. the archived Vue baseline (`~/Documents/archive/ARCHIVED-three-js-car-example-*`, with two
+ *      behaviour-neutral instrumentation hooks) - the historical oracle for the iteration 1
+ *      migration, which matched at exactly 0. It is kept for the record; iteration 2's steering
+ *      limit fix (0.84° less steering at full lock) is a documented, deliberate divergence.
+ *
  * Usage:
  *   node scripts/compare-deterministic.mjs --dump   --dir dist         --out /tmp/candidate.json
  *   node scripts/compare-deterministic.mjs --dump   --dir <baselineDir> --out /tmp/baseline.json
- *   node scripts/compare-deterministic.mjs --compare /tmp/baseline.json /tmp/candidate.json
- *
- * `--dir` serves that directory over HTTP and drives it; the instrumented baseline copy
- * (`~/Documents/archive/ARCHIVED-three-js-car-example-*`) understands the same injected
- * `window.__APEX_DETERMINISTIC` payload.
+ *   node scripts/compare-deterministic.mjs --compare baselines/physics-golden.json /tmp/candidate.json
  *
  * Chromium is expected under `PLAYWRIGHT_BROWSERS_PATH`; the bundled default is
  * `<repo>/.playwright-browsers`.
@@ -28,19 +34,19 @@ const FIXED_DELTA_SECONDS = 1 / 60;
 const FRAMES = 600;
 const TIMEOUT_MS = 120_000;
 
-/** Scripted input: pressing W, steering both ways, a jump and a brake. */
+/** Scripted input, in simulated seconds (the physics grid is 1/120 s). */
 const SCRIPT = [
-    { frame: 10, key: 'w', down: true },
-    { frame: 120, key: 'a', down: true },
-    { frame: 200, key: 'a', down: false },
-    { frame: 220, key: 'd', down: true },
-    { frame: 300, key: 'd', down: false },
-    { frame: 320, key: ' ', down: true },
-    { frame: 330, key: ' ', down: false },
-    { frame: 400, key: 'w', down: false },
-    { frame: 430, key: 'b', down: true },
-    { frame: 520, key: 'b', down: false },
-    { frame: 540, key: 'w', down: true }
+    { t: 10 / 60, key: 'w', down: true },
+    { t: 120 / 60, key: 'a', down: true },
+    { t: 200 / 60, key: 'a', down: false },
+    { t: 220 / 60, key: 'd', down: true },
+    { t: 300 / 60, key: 'd', down: false },
+    { t: 320 / 60, key: ' ', down: true },
+    { t: 330 / 60, key: ' ', down: false },
+    { t: 400 / 60, key: 'w', down: false },
+    { t: 430 / 60, key: 'b', down: true },
+    { t: 520 / 60, key: 'b', down: false },
+    { t: 540 / 60, key: 'w', down: true }
 ];
 
 const MIME = {

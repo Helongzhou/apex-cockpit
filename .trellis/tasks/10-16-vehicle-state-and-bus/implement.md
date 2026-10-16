@@ -54,9 +54,29 @@
 
 ## 实测记录（执行时填写）
 
+### 已完成（步骤 1/2/4/7/8 + 金标准工作流）
+
 | 项 | 值 |
 |---|---|
-| 用例数 / 覆盖率 | （待填） |
-| 单位换算误差 | （待填） |
-| 30/60/144 Hz 最大偏差与容差 | （待填） |
-| 事件化后 telemetry 的职责边界 | （待填） |
+| 新增模块 | `game/math/units.ts`（单位换算单一入口）、`game/math/frame-rate.ts`（每帧常量 → 时间基）、`game/vehicle-state.ts`（纯信号推导）、`game/state-bus.ts`（总线 + 可插拔状态源 + 回放源） |
+| 用例数 / 覆盖率 | **96 用例**（D1 新增 54：vehicle-state 25、state-bus 11、frame-rate 12、unit-conversion 6）；`vehicle-state.ts` / `state-bus.ts` / `units.ts` / `frame-rate.ts` 行覆盖 **100%**，整体 96.5% |
+| 单位换算误差 | **0**（严格等式：`worldSpeedToKmh(80) === 36`、负值倒车、0、往返换算均以 12 位精度断言） |
+| **AC-D1.4 帧率无关** | **30 / 60 / 144 Hz 物理轨迹逐帧位级一致（max\|delta\| = 0.0000，速度与位置均为 0）**；控制状态（电机目标 / 转向角）偏差 **0.000%**（满量程）；相机等效时间常数偏差 ≤ **0.0254 s**（容差 0.05 s） |
+| AC-D1.2 | `vehicle-state.ts` 行覆盖率 100% ≥ 80% ✅ |
+| AC-D1.3 | 单位换算误差 0 ✅ |
+| 关键修复 1 | 控制 / 相机 / 车辆视觉的"每帧常量"全部改为时间基：`perSecondRate` / `decayFactor` / `smoothingFactor` / `clampStep`，并保证 **60 Hz 下严格恒等**（`smoothingFactor` 在 `frames === 1` 时直接返回原因子，因为 `1-(1-k)` 在二进制浮点下会差 1 ulp） |
+| 关键修复 2 | 控制更新移入**物理子步**（`PhysicsStepper.step(dt, onSubstep)`），使输入在任意渲染帧率下都落在同一个 120 Hz 网格上 —— 这是 30/60/144 Hz 位级一致的根本原因 |
+| 关键修复 3 | 上游的转向角会**越出自身上限**（`if (a < MAX) a += 0.05` → 最终 0.80 rad vs 上限 0.7854 rad，差 0.84°）。修正为精确封顶；这也是与迭代 1 基线唯一的有意行为差异 |
+| 关键修复 4 | `holdJump()` 是电平触发（每调用一次加一次冲量），按住 0.1 s 在 144 Hz 下会加 14 次、30 Hz 只有 3 次。改为**每秒冲量预算**（60/s，即原 60 fps 行为） |
+| 金标准工作流 | 新增 `baselines/physics-golden.json`（601 帧）+ `npm run golden` / `npm run frame-rate`；`compare-deterministic.mjs` 头部说明"有意行为变更需同提交重录并说明原因，禁止放宽容差"。金标准复跑严格可复现（0.000e+0） |
+| 与迭代 1 基线的差异 | 首帧分歧 frame 11，最大 6.19e+1（vy）。**这不是回归**：输入采样模型由"渲染帧边界"改为"物理子步网格"，且修了转向上限。迭代 1 的归档基线继续作为历史证据保留 |
+
+### 尚未完成（D1 保持 in_progress）
+
+| 步骤 | 状态 |
+|---|---|
+| 步骤 3：`game-session` 每帧组装 sample → `deriveVehicleState` → `bus.publish`；`telemetry` 退化为消费者（事件 + 20 Hz 快照） | ⬜ 未接线（`vehicle-state` 目前只有单测覆盖，尚未进入运行时） |
+| 步骤 5：HUD 显示值改为经 `units.ts` 换算（当前 HUD 仍是原始世界单位） | ⬜ 未接线 |
+| 步骤 6：`?replay=` 最小接线（`createReplaySource` 已实现并有测试） | ⬜ 未接线 |
+| AC-D1.5 数据可插拔（UI 零改动消费回放） | ⬜ 待步骤 6 完成后验收 |
+| AC-D1.6 事件化 | ⬜ 待步骤 3 完成后验收 |

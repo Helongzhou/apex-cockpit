@@ -73,18 +73,27 @@ export class GameSession {
         return this.followCamera.camera;
     }
 
-    update(deltaSeconds: number): void {
+    /**
+     * @param onSubstep - optional hook called after every physics substep with the simulated
+     *   time so far. The regression harness uses it to inject input on the physics grid instead
+     *   of on render-frame boundaries.
+     */
+    update(deltaSeconds: number, onSubstep?: (elapsedSeconds: number) => void): void {
         // A lost WebGL context must not keep simulating: the loop is stopped anyway, and the
         // physics clock would drift while nothing can be drawn.
         if (this.paused) {
             return;
         }
-        this.controls.update();
-        this.car.updateVisuals(this.controls.getVisualState(), this.followCamera.cockpit);
-        this.stepper.step(deltaSeconds);
+        // Controls advance once per physics substep, so the same manoeuvre produces the same
+        // trajectory at 30, 60 or 144 Hz (see game/math/physics-stepper.ts).
+        this.stepper.step(deltaSeconds, fixedDeltaSeconds => {
+            this.controls.update(fixedDeltaSeconds);
+            onSubstep?.(this.stepper.elapsedSeconds);
+        });
+        this.car.updateVisuals(this.controls.getVisualState(), this.followCamera.cockpit, deltaSeconds);
         this.car.syncMeshes();
         this.environment.syncMeshes();
-        this.followCamera.update();
+        this.followCamera.update(deltaSeconds);
         this.telemetry.update();
         this.reflectionProbe.update(this.renderer, this.scene);
     }

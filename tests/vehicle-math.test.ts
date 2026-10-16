@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { boxInertia, clampSymmetric, cylinderInertia, makeAckermann } from '../game/math/vehicle-math.js';
+import { boxInertia, cylinderInertia, makeAckermann } from '../game/math/vehicle-math.js';
 
 /** Geometry the physics rig is actually tuned for. */
 const MODEL = { halfWheelbase: 1.5, halfTrack: 1 };
@@ -84,19 +84,3 @@ describe('cylinderInertia', () => {
     });
 });
 
-describe('clampSymmetric', () => {
-    it('clamps to the negative limit', () => {
-        expect(clampSymmetric(-40, 10)).toBe(-10);
-    });
-
-    it('clamps to the positive limit', () => {
-        expect(clampSymmetric(40, 10)).toBe(10);
-    });
-
-    it('passes values inside the range and on the boundary through', () => {
-        expect(clampSymmetric(4, 10)).toBe(4);
-        expect(clampSymmetric(-10, 10)).toBe(-10);
-        expect(clampSymmetric(10, 10)).toBe(10);
-        expect(clampSymmetric(0, 10)).toBe(0);
-    });
-});

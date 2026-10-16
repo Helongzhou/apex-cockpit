@@ -40,14 +40,3 @@ export function makeAckermann(model: WheelGeometry): (averageAngle: number) => [
         return [Math.atan(wheelbase / innerRadius), Math.atan(wheelbase / outerRadius)];
     };
 }
-
-/**
- * Symmetric clamp used by the camera panning speed. Unlike the original local helper it takes
- * the limit as a parameter, so this module stays free of the camera constants.
- */
-export function clampSymmetric(value: number, limit: number): number {
-    if (value < -limit) {
-        return -limit;
-    }
-    return value > limit ? limit : value;
-}
