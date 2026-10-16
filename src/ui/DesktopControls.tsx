@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { listen, releaseAll } from '../../game/listeners.js';
 
 /** Keyboard controls display (was `components/desktop-controls.js`). */
 export function DesktopControls({ isTouchDevice }: { isTouchDevice: boolean }) {
@@ -57,12 +58,13 @@ export function DesktopControls({ isTouchDevice }: { isTouchDevice: boolean }) {
 
         const onKeyDown = (event: KeyboardEvent) => updateKeyState(event.key, true);
         const onKeyUp = (event: KeyboardEvent) => updateKeyState(event.key, false);
-        window.addEventListener('keydown', onKeyDown);
-        window.addEventListener('keyup', onKeyUp);
+        const handles = [
+            listen(window, 'keydown', onKeyDown),
+            listen(window, 'keyup', onKeyUp)
+        ];
 
         return () => {
-            window.removeEventListener('keydown', onKeyDown);
-            window.removeEventListener('keyup', onKeyUp);
+            releaseAll(handles);
             window.clearTimeout(enterTimeout.current);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps

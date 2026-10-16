@@ -1,262 +1,145 @@
-> **关于本文档**
+# Apex Cockpit · In-car HMI and ADAS visualisation
+
+> A Three.js + Rapier driving demo redeveloped into a **portfolio project for in-car HMI / 3D
+> visualisation engineering**: strict TypeScript, a React 19 shell, a testable vehicle data layer,
+> ADAS overlays with a truth-vs-perception narrative, and a performance monitor that measures the
+> numbers it claims.
 >
-> 这是**上游英文原版 README**（`manuelhintermayr/three-js-car-example`，MIT），保留下来作为移植基线的历史记录。
-> 它有两点在移植后已不准确，**请以中文版 [README.md](README.md) 为准**：
+> **Status: iterations 1–3 delivered.** Originally a no-build Vue demo
+> ([manuelhintermayr/three-js-car-example](https://github.com/manuelhintermayr/three-js-car-example), MIT);
+> the migration, the stability work, the data layer, the cluster, the highway stage, the ADAS
+> layers and the tooling all live in this repository.
 >
-> 1. 项目结构一节列出的 `game/wheel-visuals.js` **在仓库中并不存在**（车轮视觉由 `car-model.js` 拆件 + `car.js` 装配完成）；
-> 2. 本地服务端口写作 `8000`，而 `package.json` 里实际是 `8080`。
->
-> 另外，本文中的 Live Demo 链接指向**上游作者的部署**，不是本仓库的部署。
+> The **Chinese README ([README.md](README.md)) is the primary, most detailed document** — this file
+> is the English summary for international readers.
 
 ---
 
-# 🏎️ Three.js + Rapier Car Racing Game
+## 1. What it is
 
-A Three.js + Rapier port of the [Babylon.js Car Racing Game](https://github.com/manuelhintermayr/babylon-js-car-example): the same 3D car playground with realistic joint-based car physics, intelligent device detection, a custom 3D car model, dynamic lighting and a modular Vue.js component architecture. Only the engine underneath changed: **Babylon.js → Three.js** for rendering and **Havok → Rapier** for physics.
+**Implemented today**
 
-## 🎮 Live Demo
+- Joint-based vehicle physics (suspension, steering and wheel spin are real Rapier constraints).
+- Cockpit view: the steering wheel, pedals and gear lever animate from the real control state.
+- Two stages: a **studio** test track and a **highway** with three lanes, guardrails, gantries,
+  lamps and a kinematic lead vehicle cruising a deterministic centreline.
+- **Digital cluster** (DOM/CSS, no second render context): analogue speed gauge, gear indicator,
+  centre-zero power bar, data-driven status icons.
+- **ADAS visualisation layers**: lane lines and object-pooled target boxes with velocity leaders,
+  isolated on a dedicated `THREE.Layers` bit so they never appear in the car's reflection or in the
+  bloom dim pass.
+- **Truth vs perception**: a deterministic noise model (missed detections, position jitter, heading
+  error, sensor latency, confidence) downgrades ground truth into "what a perception stack would
+  report"; one button switches between the two views.
+- **Performance monitor** (F9): frame-time p50/p95/p99, main-thread script time, draw calls,
+  triangles, resource counts, physics substeps, ADAS targets and the measured bundle baseline.
+- Runtime hardening: render-loop error boundary, WebGL context-loss recovery, retryable asset
+  loading, serialized resets, one disposer for every DOM listener.
 
-**Play now:** [https://projects.manuelhintermayr.com/three-js-car-example](https://projects.manuelhintermayr.com/three-js-car-example)
-
-The Babylon.js original runs at [https://projects.manuelhintermayr.com/babylon-js-car-example](https://projects.manuelhintermayr.com/babylon-js-car-example), so both versions can be compared side by side.
-
-![Game Preview](preview.jpg)
-
-## 🎬 Gameplay Demo
-
-The gameplay matches the original, so the demo video is shared with the Babylon.js port:
-
-<video src="https://raw.githubusercontent.com/manuelhintermayr/babylon-js-car-example/main/preview.mp4" poster="preview.jpg" width="800" controls muted loop playsinline>
-  <img src="preview.jpg" alt="Gameplay demo (shared with the Babylon.js port)" width="800" />
-</video>
-
-## 🔁 What Was Ported
-
-Every feature of the original showcase is reproduced on the new stack. The Vue components, stylesheets, controls and telemetry are identical; the whole 3D and physics layer was rewritten.
-
-| Original (Babylon.js + Havok) | Port (Three.js + Rapier) |
-|---|---|
-| `BABYLON.Engine` / `Scene` render loop | `THREE.WebGLRenderer` with `setAnimationLoop` and `THREE.Timer` |
-| Havok physics plugin, gravity `-150` | `RAPIER.World`, gravity `-150`, fixed 120 Hz timestep with an accumulator |
-| `PhysicsShapeConvexHull` car body, mass 5000, center of mass `(0, -2.5, 1)` | `ColliderDesc.convexHull` from the baked model vertices with explicit mass properties |
-| Wheel / axle cylinders with `Physics6DoFConstraint` (soft suspension, steering axis, wheel spin) | Joint chain per wheel: revolute (steering) → prismatic (spring suspension) → revolute (spin) |
-| Velocity motor on the front wheels with a max force, position motor for steering | `configureMotorVelocity` / `configureMotorPosition` with `setMotorMaxForce` (force based motors) |
-| Collision filter masks (car parts never collide with each other) | Rapier collision groups with the same membership / filter split |
-| `FollowCamera` with mouse orbit | Hand-written follow camera with the same radius, height offset, acceleration and orbit control |
-| `GlowLayer` for emissive lamps | Selective bloom (`UnrealBloomPass`) for the objects on a dedicated glow layer |
-| `ReflectionProbe` on the car material | `CubeCamera` reflection probe feeding the car's PBR material |
-| `HemisphericLight`, `SpotLight` headlights with shadows and taillights | `HemisphereLight`, shadow-casting `SpotLight` headlights and a red taillight spot |
-| Race track, walls, towers, bridge, five knockable boxes | Same geometry, materials and physics parameters |
-
-The gameplay numbers stay the same: speed ramps, steering steps, jump impulses, collision heuristics and the knocked-box detection use the original values. Measured side by side, both versions accelerate from 0 to 150 units in about three seconds and rest at the same ride height.
-
-## 🚀 Architecture
-
-### **No Build Step**
-- **ES6 modules with an import map** – Three.js and Rapier are loaded from jsDelivr, Vue.js from unpkg
-- **Static hosting** – any web server that serves the folder is enough
-- **Modern JavaScript** with async/await, classes and small single-purpose modules
-
-### **Component-Based UI**
-- **Vue.js 3** components (`info-panel`, `desktop-controls`, `mobile-controls`) taken over unchanged
-- **Props-based data flow** from the game telemetry into the debug panels
-- **Event-driven communication** for touch controls and reset
-
-### **Game Modules**
-- **`game/three-game.js`** – public entry points (`initializeGame`, `resetGame`, `resetBoxes`) and the render loop
-- **`game/game-session.js`** – one playable round: scene, physics world, car, environment and the per-frame update
-- **`game/car.js`** – car assembly on Rapier: chassis, suspension, steering and wheel joints
-- **`game/world.js`** – studio environment with track, walls, towers, bridge and knockable boxes
-- **`game/controls.js`**, **`game/telemetry.js`**, **`game/follow-camera.js`** – input, HUD data and camera
-- **`game/rendering.js`** – renderer, selective glow post-processing and the reflection probe
-
-### **Intelligent Device Detection**
-- **CSS media queries** for accurate touch device detection
-- **Automatic UI adaptation** based on input capabilities
-- **Cross-platform compatibility** (Desktop + Mobile + Tablets)
-
-## 🎮 Game Features
-
-### 🏁 Core Gameplay
-- **Joint-based car physics** powered by [Rapier](https://rapier.rs/): every wheel is a rigid body with its own suspension, steering and spin joints
-- **Hand-made low-poly car model** (Ford Anglia) loaded with the Three.js `GLTFLoader` and Draco decompression; its wheels, headlights, taillights, steering wheel, pedals and gear lever are used directly by the game
-- **Convex hull collider** generated from the car mesh for accurate body collisions
-- **Follow camera** with mouse orbit and smooth acceleration, plus a **cockpit view** through the windshield (C key)
-- **Jump mechanics** with the Space key and precision **braking** with the B key
-- **Ackermann steering** – the inner wheel turns sharper than the outer wheel
-- **Animated cockpit** – the steering wheel turns and the gear lever rocks in time with the controls; in the cockpit view the pedals press too
-
-### 🎯 Game Objectives & Environment
-- 🎯 **Knock down boxes** – Hit all 5 orange physics-enabled targets
-- 💥 **Navigate obstacles** – Avoid brown collision towers strategically placed around the track
-- 🌉 **Bridge challenges** – Jump onto the elevated bridge platform
-- 🏎️ **Speed challenges** – Test vehicle performance on the 800 × 800 studio track
-- 🎨 **Studio environment** – Race in a white-walled studio setting
-
-### 💡 Dynamic Lighting System
-- **Warm white headlights** (#ddc584) with a shadow-casting spot light
-- **Red taillights** with a red spot light washing the floor behind the car
-- **Selective glow** on the lamps, like the Babylon.js glow layer
-- **Live reflections** on the car body from a cube camera reflection probe
-- **Dark ambient lighting** for the dramatic racing atmosphere
-
-### 📊 Advanced Telemetry
-- **Vehicle telemetry** (speed, 3D position, rotation)
-- **Performance metrics** (total collisions, race time, maximum speed)
-- **Progress tracking** (knocked boxes counter with physics detection)
-- **FPS counter** badge in the top right corner, averaged over half-second windows
-- **Interactive debug panels** with F12 / backtick toggle and auto-hide on mobile
-
-## 🖥️ Cross-Platform Controls
-
-### **Desktop Experience**
-- **WASD / Arrow Keys** for movement with real-time visual feedback
-- **Space Bar** for jumping
-- **B Key** for braking
-- **C Key** to toggle between the follow camera and the cockpit view
-- **Mouse drag** for 360° camera rotation around the vehicle
-- **Enter Key** for an instant game reset
-- **F12 / Backtick** for the debug panel toggle
-
-### **Mobile Experience**
-- **Virtual joystick** for movement
-- **Touch brake button** (🚗), **touch jump button** (🚀) and **touch reset button** (🔄)
-- **Auto-hiding desktop controls** on touch devices
-
-## 🏗️ Project Structure
-
-```
-📦 three-js-car-example/
-├── 📄 .gitignore             # Git ignore patterns
-├── 📄 index.html             # HTML template with the import map and module imports
-├── 📄 index.js               # 🎯 Application entry point
-├── 📄 vue-app.js             # 🎨 Main Vue app with device detection
-├── 📄 package.json           # Project metadata and serve scripts
-├── 📄 LICENSE                # MIT License
-├── 📄 README.md              # Project documentation
-├── 📄 THIRD_PARTY_NOTICES.md # Third-party code, libraries and assets
-├── 🖼️ preview.jpg            # Game preview screenshot
-│
-├── 📁 components/            # 🔧 Vue components (unchanged from the original)
-│   ├── 📄 info-panel.js      # Debug panel with glassmorphism UI
-│   ├── 📄 desktop-controls.js # Keyboard controls display with jump/brake
-│   ├── 📄 mobile-controls.js  # Touch controls with joystick & jump
-│   └── 📄 fps-counter.js     # FPS badge
-│
-├── 📁 css/                   # 🎨 Stylesheets (unchanged from the original)
-│   ├── 📄 main.css
-│   ├── 📄 info-panel.css
-│   ├── 📄 mobile-controls.css
-│   ├── 📄 desktop-controls.css
-│   └── 📄 fps-counter.css
-│
-└── 📁 game/                  # 🎮 Three.js + Rapier game engine & assets
-    ├── 📄 three-game.js      # Entry points: initializeGame, resetGame, resetBoxes
-    ├── 📄 fps-meter.js       # Frames per second, averaged over short windows
-    ├── 📄 game-session.js    # One round: scene, world, car, environment, update loop
-    ├── 📄 physics-world.js   # Rapier world, fixed timestep stepper, collision groups
-    ├── 📄 rendering.js       # Renderer, selective glow bloom, reflection probe
-    ├── 📄 follow-camera.js   # Follow camera with mouse orbit
-    ├── 📄 car.js             # Car assembly: chassis, suspension, steering, wheels
-    ├── 📄 car-model.js       # GLB loading and transform baking (cached)
-    ├── 📄 car-lights.js      # Headlights and taillights
-    ├── 📄 wheel-visuals.js   # Wheel cylinders with tyre texture and axle boxes
-    ├── 📄 world.js           # Track, walls, towers, bridge, knockable boxes
-    ├── 📄 controls.js        # Keyboard + touch input mapped onto the motors
-    ├── 📄 telemetry.js       # Speed, race timer, collision and box detection
-    ├── 📄 color.js           # sRGB color helper for the original color values
-    ├── 📁 models/
-    │   └── 📄 car.glb        # Hand-made Ford Anglia model (GLB, Draco-compressed)
-```
-
-## 🛠️ Technology Stack
-
-- **[Three.js](https://threejs.org/) 0.185** – WebGL rendering, GLTF loading, post-processing
-- **[Rapier](https://rapier.rs/) 0.20** (`@dimforge/rapier3d-compat`) – Rust physics engine compiled to WebAssembly
-- **[Vue.js 3](https://vuejs.org/)** – Reactive UI components
-- **Import maps** – dependency loading without a bundler
-
-## 🚀 Getting Started
-
-### **🎮 Try It Now**
-**Live Demo:** [https://projects.manuelhintermayr.com/three-js-car-example](https://projects.manuelhintermayr.com/three-js-car-example)
-
-*No installation required - play directly in your browser!*
-
-### **Prerequisites**
-- A modern browser with import map support (Chrome 89+, Firefox 108+, Safari 16.4+)
-- A local web server (required for ES6 modules)
-- Internet access on first load (libraries are fetched from CDNs)
-
-### **Local Development Setup**
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/manuelhintermayr/three-js-car-example.git
-   cd three-js-car-example
-   ```
-
-2. **Start a local server**
-   ```bash
-   # Using Python
-   python -m http.server 8000
-
-   # Using Node.js
-   npx serve .
-
-   # Using PHP
-   php -S localhost:8000
-   ```
-
-3. **Open in browser**
-   ```
-   http://localhost:8000
-   ```
-
-4. **Optional: Swap the Car Model**
-   - Place your own `car.glb` in `game/models/`
-   - All meshes are merged, scaled and baked into one car body; the convex hull collider is generated from it
-
-## 🎮 How to Play
-
-1. **🏁 Start the Game** – open the page, the car drops onto the track; use `F12` or `` ` `` to open the debug panels
-2. **🚗 Master the Controls** – WASD to drive, Space to jump, B to brake, C for the cockpit view, mouse drag to orbit the camera
-3. **🎯 Complete Objectives** – knock over the 5 orange boxes, avoid the towers, jump onto the bridge
-4. **🏆 Push the Limits** – the car accelerates hard and can be launched with a held jump key
-
-## 📝 Porting Notes
-
-- **Handedness** – Babylon.js is left-handed, Three.js is right-handed. The X axis of every scene position is mirrored so the track looks identical; the car still drives towards +Z, which makes +X the car's left side.
-- **Colors** – Babylon.js `StandardMaterial` colors are displayed without gamma correction, so the original RGB values are interpreted as sRGB (`game/color.js`) to keep the same look under Three.js' color management.
-- **Suspension** – Havok's soft 6DoF limits let the chassis sag about two units under its own weight. The port reproduces this with prismatic joints and a force-based spring motor using the original stiffness and damping values.
-- **Motors** – Rapier's joint motors use the force-based model with the original maximum forces, which gives the same acceleration profile and braking behaviour as the Havok velocity and position motors.
-- **Detection timings** – knocked-box and collision detection run on simulated physics time instead of wall-clock time, so a slow first frame or a hidden tab cannot produce phantom hits.
-- **Reset** – the loaded car model is cached, so resetting the game rebuilds scene and physics world without downloading the model again.
-- **Performance** – like the original, the canvas renders at CSS pixel resolution (device pixel ratio capped at 1). The shadow map is rendered once per frame instead of once per render pass, the glow is computed at half resolution and the reflection probe refreshes one cube face per frame after its first full capture. The physics stepper catches up with up to eight sub-steps per frame, so the simulation stays in real time even at low frame rates.
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📄 License
-
-The original source code of this project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. The MIT License covers this repository's own source code; the third-party example code it builds on, the libraries it loads and the hand-made 3D car model it uses are documented separately in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-
-## 🙏 Acknowledgments
-
-- **[babylon-js-car-example](https://github.com/manuelhintermayr/babylon-js-car-example)** – the original game this port is based on ([live demo](https://projects.manuelhintermayr.com/babylon-js-car-example))
-- **Three.js Team** – for the rendering engine and the post-processing examples
-- **Dimforge** – for the Rapier physics engine
-- **Vue.js Team** – for the reactive framework
-- **3D car model** – the hand-made low-poly Ford Anglia by Manuel Hintermayr, created for the manuelhintermayr-portfolio project and reused here with attribution
-- **Babylon.js Community** – for the demos the original car physics and camera controls were based on:
-  - Car physics implementation based on [Babylon.js Playground #ANV5OM#139](https://www.babylonjs-playground.com/#ANV5OM#139)
-  - Mouse camera controls based on [Babylon.js Playground #FMQX86#1](https://playground.babylonjs.com/#FMQX86#1)
+**Not in scope**: perception/planning algorithms, point clouds, backends, engine ports,
+multi-screen or voice interaction, automotive certification.
 
 ---
 
-*Created with ❤️ and cutting-edge web technologies*
+## 2. Quick start
+
+```bash
+npm install          # Node >= 22.12
+npm run dev          # Vite dev server (http://localhost:5173)
+npm run build        # static dist/ - no CDN references, works offline
+npm run preview      # preview the build (http://localhost:8080)
+```
+
+Controls: **W/A/S/D** drive, **Space** jump, **B** brake, **C** cockpit view, **Enter** reset,
+**F12** vehicle-data panels, **F9** performance panel. Stage and ADAS switches are in the top-right.
+
+---
+
+## 3. Verification (everything in this repo is measured, not asserted)
+
+```bash
+npm run typecheck     # strict TypeScript, 0 errors
+npm run test          # vitest: 173 unit tests
+npm run test:coverage # coverage (100% on the pure data-layer modules)
+npm run smoke         # 21 UI behaviour checks (Playwright, against dist/)
+npm run stability     # 22 fault-injection checks (exception, context loss, load retry, resets)
+npm run cluster       # 10 digital-cluster checks
+npm run stage         # 12 stage-switch checks (cost + leak-free switching)
+npm run adas          # 15 ADAS/perception checks
+npm run perf          # 14 performance-panel checks
+npm run deterministic -- --compare baselines/physics-golden.json /tmp/candidate.json
+npm run frame-rate    # 30/60/144 Hz comparison (frame-rate independence)
+npm run budget        # bundle + draw-call measurement, regenerates the panel baseline
+```
+
+Chromium binaries default to `.playwright-browsers/` (git-ignored); override with
+`PLAYWRIGHT_BROWSERS_PATH`.
+
+---
+
+## 4. Architecture
+
+```
+index.html → src/main.tsx → src/ui/App.tsx          (React shell, 76 kB gzip first screen)
+                                │ dynamic import()
+                                ▼
+                       src/game-bridge.ts ──► game/three-game.ts   (lazy chunk: three + game logic)
+                                                   │
+                                                   ├─ game/game-session.ts   per-frame: input → physics → visuals → camera → telemetry
+                                                   ├─ game/physics-world.ts  Rapier (wasm shipped as its own asset)
+                                                   ├─ game/adas/*            lanes, target pool, perception model
+                                                   ├─ game/scenes/*          stage registry (studio | highway)
+                                                   └─ game/math/*            pure maths (units, frame-rate, lanes, stats, path)
+src/state.ts  ◄── the only cross-layer seam: the game writes a GameHost, React reads it
+```
+
+Rules enforced by grep in CI-style checks: `game/` never imports React; the UI never imports the
+game statically (that is what keeps the first screen small); every DOM listener goes through
+`game/listeners.ts` so `window.__listenerCount()` can prove registered == released.
+
+---
+
+## 5. Measured results
+
+| Metric | Before | After | Target |
+|---|---|---|---|
+| First-screen gzip | 1,333.9 kB | **76.1 kB** | ≤ 450 kB |
+| Game chunk gzip | (same bundle) | 119.3 kB | — |
+| Rapier + Draco wasm (gzip, streamed) | inlined as base64 | 896.2 kB | self-hosted |
+| Draw calls / frame | ~120–150 (estimated) | **76–82** (view dependent) | ≤ 80 |
+| Frame-rate independence | per-frame constants (2.4× faster at 144 Hz) | **30/60/144 Hz bit-identical** | equal curves |
+| Behaviour invariance vs upstream | — | 601 frames, max \|Δ\| = **0.000e+0** | ≤ 1e-6 |
+| Unit correctness | raw world units labelled km/h | exact `v / 8 × 3.6` | 0 error |
+| Runtime exceptions | loop dies permanently | boundary + visible fatal + retry | recoverable |
+| WebGL context loss | no app-level handling | pause + rebuild, ready in 174 ms | recover |
+| 20 resets / 20 stage switches | unknown | geometries/textures/programs/listeners at baseline | no growth |
+
+Honest caveats, recorded in the task archives rather than hidden: the **frame-time p95 budget of
+0.5 ms is not resolvable in this environment** (software rasterisation at ~12 fps has a 3–10 ms
+noise floor, so the criterion is marked inconclusive with a structural argument instead); the
+**draw-call budget is met on the highway but view-dependent on the studio stage**; and the
+perceived stage-switch time (~1 s under SwiftShader) is dominated by the first frame's GPU work,
+while the application's own rebuild costs **2.2 ms**.
+
+---
+
+## 6. Demo assets
+
+`docs/demo/` holds screenshots of the studio cockpit, the highway with ADAS truth and perception
+overlays, the performance panel and the cluster, plus a ~30 s recording (`apex-cockpit-demo.webm`,
+781 kB). Regenerate with `npm run build && node scripts/capture-demo.mjs dist`.
+
+---
+
+## 7. Attributions
+
+Upstream baseline: [manuelhintermayr/three-js-car-example](https://github.com/manuelhintermayr/three-js-car-example)
+(MIT), itself a port of [babylon-js-car-example](https://github.com/manuelhintermayr/babylon-js-car-example).
+The stylesheets in `css/` are reused byte-for-byte from upstream; the Vue components were rewritten
+as React in iteration 1. Vehicle physics and camera control derive from public Babylon.js Playground
+examples; the selective bloom follows the Three.js example `webgl_postprocessing_unreal_bloom_selective`.
+Libraries: Three.js (MIT), Rapier (Apache-2.0), React (MIT) — all bundled locally since iteration 1.
+The low-poly Ford Anglia model (`game/models/car.glb`) is Manuel Hintermayr's work and is **not**
+covered by the code licence; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+Licensed under the MIT License — see [LICENSE](LICENSE).

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { listen } from '../../../game/listeners.js';
 import type { GameHost } from '../../../game/types.js';
 import type { Store } from '../../state';
 import { useGameState } from '../../hooks/useGameState';
@@ -35,8 +36,8 @@ export function PerfPanel({ store }: { store: Store<GameHost> }) {
                 setVisible(current => !current);
             }
         };
-        window.addEventListener('keydown', onKeyDown);
-        return () => window.removeEventListener('keydown', onKeyDown);
+        const handle = listen(window, 'keydown', onKeyDown);
+        return () => handle.release();
     }, []);
 
     if (!visible) {

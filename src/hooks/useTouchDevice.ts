@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import type { GameHost } from '../../game/types.js';
-import { listen, releaseAll } from '../../game/listeners.js';
+import { listen, releaseAll, type ListenerHandle } from '../../game/listeners.js';
 
 /**
  * Port of `vue-app.js` `detectTouchOnly()`: capability queries plus a runtime switch on the
@@ -18,8 +18,10 @@ export function useTouchDevice(host: GameHost): void {
         };
 
         updateTouchOnly();
-        mqCoarseNoHover.addEventListener?.('change', updateTouchOnly);
-        mqAnyHover.addEventListener?.('change', updateTouchOnly);
+        const queryHandles: ListenerHandle[] = [
+            listen(mqCoarseNoHover, 'change', updateTouchOnly),
+            listen(mqAnyHover, 'change', updateTouchOnly)
+        ];
 
         // Listen for first touch event - set to touch device
         const handleTouch = () => {
@@ -50,9 +52,7 @@ export function useTouchDevice(host: GameHost): void {
         }
 
         return () => {
-            mqCoarseNoHover.removeEventListener?.('change', updateTouchOnly);
-            mqAnyHover.removeEventListener?.('change', updateTouchOnly);
-            releaseAll(handles);
+            releaseAll([...queryHandles, ...handles]);
         };
     }, [host]);
 }

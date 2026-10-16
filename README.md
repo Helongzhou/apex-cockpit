@@ -3,7 +3,7 @@
 > 基于 **Three.js 0.185 + Rapier 0.20** 的座舱驾驶 Demo，正在二次开发为面向 **座舱工程师（3D 可视化）** 岗位的作品集项目。
 > 当前状态：**迭代 1 已完成** —— 已从无构建的 Vue 版迁移到 **Vite + TypeScript(strict) + React 19**，行为逐帧等价（601 帧物理状态零差异），运行时加固（错误边界 / 上下文丢失恢复 / 加载重试 / 重置资源不泄漏），首屏 gzip **1,333.9 kB → 72.9 kB**。仪表盘与 ADAS 可视化在迭代 2–3（见"路线图"）。
 >
-> [English baseline README](README.en.md)（上游英文原版，保留作移植记录）
+> [English README](README.en.md)（英文摘要，面向国际读者）｜[上游英文原版](https://github.com/manuelhintermayr/three-js-car-example)
 
 ![预览](preview.jpg)
 

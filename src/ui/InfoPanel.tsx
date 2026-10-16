@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { listen } from '../../game/listeners.js';
 import { useGameState } from '../hooks/useGameState';
 import type { Store } from '../state';
 import type { GameHost } from '../../game/types.js';
@@ -46,9 +47,9 @@ export function InfoPanel({ store, isTouchDevice }: { store: Store<GameHost>; is
             }
         };
 
-        window.addEventListener('keydown', handleGlobalKeydown);
+        const handle = listen(window, 'keydown', handleGlobalKeydown);
         return () => {
-            window.removeEventListener('keydown', handleGlobalKeydown);
+            handle.release();
             window.clearTimeout(hideTimeout.current);
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps

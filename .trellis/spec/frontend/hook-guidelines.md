@@ -20,6 +20,7 @@
 3. **不在 effect 里做逐帧工作**：逐帧逻辑属于 `game/` 的渲染循环；hook 只做"接线"和"清理"。
 4. **异步初始化要能取消**：`App` 的启动 effect 用 `disposed` 标志防止"chunk 加载完成后组件已卸载"的竞态（`src/ui/App.tsx`）。
 5. **不在 hook 里持有游戏对象**：hook 只接触 `store` / `host` / DOM。
+6. **组件内的临时监听器同样走登记处**（迭代 3 起强制）：`PerfPanel` 的 F9、`InfoPanel` 的 F12、`DesktopControls` 的按键高亮都通过 `listen()` 注册并在 cleanup 里 `release()`，不是裸 `addEventListener`。
 
 ---
 
