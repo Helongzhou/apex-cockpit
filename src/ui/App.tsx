@@ -15,6 +15,7 @@ import { RuntimeOverlay } from './RuntimeOverlay';
 import { Cluster } from './cluster/Cluster';
 import { StageSwitcher } from './scene-switcher';
 import { AdasToggle } from './adas-toggle';
+import { PerfPanel } from './perf-panel/PerfPanel';
 
 export interface AppProps {
     store: Store<GameHost>;
@@ -73,6 +74,7 @@ export function App({ store, host, options }: AppProps) {
             {clusterEnabled ? <Cluster store={store} /> : null}
             <StageSwitcher host={host} stage={stage} stages={stages} />
             <AdasToggle host={host} mode={adasMode} available={adasAvailable} />
+            <PerfPanel store={store} />
             <RuntimeOverlay store={store} />
         </>
     );

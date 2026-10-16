@@ -1,0 +1,2 @@
+{"file": "docs/superpowers/specs/2026-10-15-iteration-plan.md", "reason": "迭代 3 性能工具与预算表（§7.1/§7.2）"}
+{"file": ".trellis/spec/frontend/state-management.md", "reason": "面板必须走低频快照而非逐帧订阅"}

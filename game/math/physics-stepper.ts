@@ -22,11 +22,17 @@ export class PhysicsStepper {
     accumulator: number;
     /** Simulated seconds so far, independent of frame rate and tab visibility */
     elapsedSeconds: number;
+    /** Substeps executed by the most recent `step()` call. */
+    stepsLastFrame: number;
+    /** Substeps executed since construction. */
+    totalSteps: number;
 
     constructor(world: SteppableWorld) {
         this.world = world;
         this.accumulator = 0;
         this.elapsedSeconds = 0;
+        this.stepsLastFrame = 0;
+        this.totalSteps = 0;
     }
 
     /**
@@ -41,6 +47,7 @@ export class PhysicsStepper {
         this.accumulator += Math.min(deltaSeconds, PHYSICS_TIMESTEP * MAX_STEPS_PER_FRAME);
 
         let steps = 0;
+        this.stepsLastFrame = 0;
         while (this.accumulator >= PHYSICS_TIMESTEP && steps < MAX_STEPS_PER_FRAME) {
             onSubstep?.(PHYSICS_TIMESTEP);
             this.world.step();
@@ -48,5 +55,7 @@ export class PhysicsStepper {
             this.elapsedSeconds += PHYSICS_TIMESTEP;
             steps++;
         }
+        this.stepsLastFrame = steps;
+        this.totalSteps += steps;
     }
 }

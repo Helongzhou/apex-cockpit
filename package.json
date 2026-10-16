@@ -28,7 +28,9 @@
     "golden": "node scripts/compare-deterministic.mjs --dump --dir dist --out baselines/physics-golden.json",
     "cluster": "node scripts/cluster-check.mjs dist",
     "stage": "node scripts/stage-check.mjs dist",
-    "adas": "node scripts/adas-check.mjs dist"
+    "adas": "node scripts/adas-check.mjs dist",
+    "perf": "node scripts/perf-check.mjs dist",
+    "budget": "node scripts/measure-budget.mjs dist --write"
   },
   "keywords": [
     "threejs",

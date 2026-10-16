@@ -43,6 +43,20 @@ export function createInitialGameState(): GameHost {
             steerAngleDeg: 0,
             collision: false
         },
+        perf: {
+            interval: { samples: 0, min: 0, p50: 0, p95: 0, p99: 0, max: 0, mean: 0 },
+            script: { samples: 0, min: 0, p50: 0, p95: 0, p99: 0, max: 0, mean: 0 },
+            fps: 0,
+            physicsStepsLastFrame: 0,
+            physicsStepsTotal: 0,
+            drawCalls: 0,
+            triangles: 0,
+            geometries: 0,
+            textures: 0,
+            programs: 0,
+            adasTargets: 0,
+            updatedAt: 0
+        },
         adasMode: 'off',
         adasAvailable: false,
         stage: 'studio',

@@ -9,6 +9,7 @@ import { LoadFailure, loadWithRetry } from './loading.js';
 import { GameSession } from './game-session.js';
 import { DEFAULT_STAGE, stageDefinition, stageSummaries } from './scenes/index.js';
 import { FpsMeter } from './fps-meter.js';
+import { PerfMonitor } from './perf-monitor.js';
 import type { GameHost, StageId } from './types.js';
 
 const CANVAS_FOCUS_DELAY_MS = 100;
@@ -45,6 +46,11 @@ let currentStage: StageId = DEFAULT_STAGE;
 let lastSwitchMs = 0;
 let gameOptions: GameOptions = {};
 let frameIndex = 0;
+const perfMonitor = new PerfMonitor();
+let lastFrameTimestamp = 0;
+let lastPerfPublish = 0;
+/** The panel is refreshed four times a second, never per frame. */
+const PERF_PUBLISH_INTERVAL_MS = 250;
 const timer = new THREE.Timer();
 // Enables the Page Visibility guard: without it the first frame after a hidden tab
 // carries the whole hidden interval as its delta (docs/research/2026-10-15-external-facts.md §2).
@@ -300,6 +306,10 @@ async function startSession(host: GameHost): Promise<void> {
 }
 
 function renderFrame(): void {
+    const frameStarted = performance.now();
+    const interval = lastFrameTimestamp === 0 ? 0 : frameStarted - lastFrameTimestamp;
+    lastFrameTimestamp = frameStarted;
+
     // Injected by the stability checks; throws inside the boundary on purpose.
     if (injectedFrameError !== null) {
         const message = injectedFrameError;
@@ -316,6 +326,48 @@ function renderFrame(): void {
     fpsMeter.tick();
     frameIndex += 1;
     gameOptions.onFrame?.(frameIndex, session);
+
+    // Performance sampling: the interval is what the user feels, the script time is what we own.
+    perfMonitor.frame(interval, performance.now() - frameStarted, session?.stepper.stepsLastFrame ?? 0);
+    publishPerf(frameStarted);
+}
+
+/**
+ * Copies a performance snapshot into the host at panel rate (4 Hz). Field-by-field writes keep
+ * the store's "notify only on real change" semantics, and React never sees per-frame data.
+ */
+function publishPerf(now: number): void {
+    if (currentHost === null || now - lastPerfPublish < PERF_PUBLISH_INTERVAL_MS) {
+        return;
+    }
+    lastPerfPublish = now;
+    const snapshot = perfMonitor.snapshot();
+    const adas = session?.adasStats() ?? null;
+    const perf = currentHost.perf;
+    perf.interval.samples = snapshot.interval.samples;
+    perf.interval.min = snapshot.interval.min;
+    perf.interval.p50 = snapshot.interval.p50;
+    perf.interval.p95 = snapshot.interval.p95;
+    perf.interval.p99 = snapshot.interval.p99;
+    perf.interval.max = snapshot.interval.max;
+    perf.interval.mean = snapshot.interval.mean;
+    perf.script.samples = snapshot.script.samples;
+    perf.script.min = snapshot.script.min;
+    perf.script.p50 = snapshot.script.p50;
+    perf.script.p95 = snapshot.script.p95;
+    perf.script.p99 = snapshot.script.p99;
+    perf.script.max = snapshot.script.max;
+    perf.script.mean = snapshot.script.mean;
+    perf.fps = snapshot.fps;
+    perf.physicsStepsLastFrame = snapshot.physicsStepsLastFrame;
+    perf.physicsStepsTotal = snapshot.physicsStepsTotal;
+    perf.drawCalls = renderer.info.render.calls;
+    perf.triangles = renderer.info.render.triangles;
+    perf.geometries = renderer.info.memory.geometries;
+    perf.textures = renderer.info.memory.textures;
+    perf.programs = renderer.info.programs?.length ?? 0;
+    perf.adasTargets = adas?.targets ?? 0;
+    perf.updatedAt = now;
 }
 
 /**

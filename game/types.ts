@@ -69,6 +69,34 @@ export interface VehicleSnapshot {
 
 export type StageId = 'studio' | 'highway';
 
+export interface PerfSummary {
+    samples: number;
+    min: number;
+    p50: number;
+    p95: number;
+    p99: number;
+    max: number;
+    mean: number;
+}
+
+export interface PerfSnapshot {
+    /** rAF-to-rAF frame time, ms: what the user experiences. */
+    interval: PerfSummary;
+    /** Time spent inside this application's frame callback, ms. */
+    script: PerfSummary;
+    fps: number;
+    physicsStepsLastFrame: number;
+    physicsStepsTotal: number;
+    drawCalls: number;
+    triangles: number;
+    geometries: number;
+    textures: number;
+    programs: number;
+    adasTargets: number;
+    /** Wall-clock time of the last panel refresh, used by the checks. */
+    updatedAt: number;
+}
+
 /** ADAS overlay mode owned by the UI, read by the game layer. */
 export type { AdasMode } from './adas/manager.js';
 
@@ -89,6 +117,11 @@ export interface GameHost {
     isRacing: boolean;
     /** Cluster snapshot, written field by field from the bus at the HUD rate. */
     vehicle: VehicleSnapshot;
+    /**
+     * Performance snapshot, written by the game at <=4 Hz. React never subscribes to per-frame
+     * data: the panel reads this low-frequency object like any other HUD field.
+     */
+    perf: PerfSnapshot;
     /** ADAS overlay mode; the toggle writes it and the game layer reads it every frame. */
     adasMode: import('./adas/manager.js').AdasMode;
     /** True when the running stage publishes an ADAS feed; written by the game. */

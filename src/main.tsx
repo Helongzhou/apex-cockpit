@@ -20,6 +20,7 @@ import '../css/fps-counter.css';
 import '../css/runtime-overlay.css';
 import '../css/cluster.css';
 import '../css/adas.css';
+import '../css/perf-panel.css';
 
 const { store, host } = createGameHost();
 const options = createDeterministicOptions();
