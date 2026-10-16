@@ -78,7 +78,10 @@ grep -rn "To fill\|TBD\|待填" .trellis/spec/frontend/   # 期望无输出
 
 | 项 | 值 |
 |---|---|
-| 抽取出的模块与函数清单 | （待填） |
-| 用例数 / 覆盖率 | （待填） |
-| 四份规范的条数与引用数 | （待填） |
-| 已知偏差条目 | （待填） |
+| 抽取出的模块与函数清单 | `game/math/vehicle-math.ts`：`cylinderInertia` / `boxInertia` / `makeAckermann`（自 `car.ts`）、`clampSymmetric`（自 `follow-camera.ts` 的 `clampSpeed`，改为传入 limit 以免依赖相机常量）；`game/math/geometry.ts`：`normalizeNodeName` / `filterTriangles`（自 `car-model.ts`）；`game/math/input-mapping.ts`：`NO_DIRECTION` / `Action` / `DIRECTION_LABELS` / `describeDirection`（自 `controls.ts`）；`game/math/physics-stepper.ts`：`PhysicsStepper`（自 `physics-world.ts`，**额外抽取**：原模块 import Rapier，而 Rapier 的 wasm 在 node 里无法 import，不抽就无法单测） |
+| 纯搬移证据 | 抽取后 `npm run typecheck` 0 错误、`npm run build` 通过、`compare-deterministic` **max\|delta\| = 0.000e+0**（601 帧）—— 说明抽取未改变任何行为 |
+| 用例数 / 覆盖率 | **45 个用例 / 6 个文件**（目标 ≥12）；覆盖率 **语句 93.33%、分支 87.23%、函数 92.85%、行 93.8%**（目标 ≥80）；`game/math/**` 四个模块均为 **100%** |
+| 覆盖率工具 | 需补装 `@vitest/coverage-v8@5.0.4`（vitest 5 的 coverage provider 是独立包）；`reporter` 必须用合法的 `text-summary`（写 `summary` 会被 istanbul 当成包名去 import 并报 ERR_MODULE_NOT_FOUND） |
+| 规范条数与引用 | 6 份规范共 **359 行 / 约 40 条规则**，全部带真实路径或可执行命令；自检 `grep -rn "To fill\|TBD\|待填" .trellis/spec/frontend/` **无输出**；抽查 5 处引用（`game/listeners.ts`、`src/game-bridge.ts`、`game/render-loop.ts`、`scripts/measure-budget.mjs`、`game/math/vehicle-math.ts`）全部存在 |
+| 已知偏差条目 | ① `clampSymmetric` 相对原 `clampSpeed` 增加了 `limit` 参数（原实现闭包捕获 `FOLLOW.maxCameraSpeed`，直接搬移会把相机常量拖进纯函数模块）；② 规范语言选**中文**（项目决策 A5），因此改写了 `index.md` 里"文档必须英文"的模板说明；③ 除计划要求的 4 份规范外，一并回填了 `component-guidelines.md` / `hook-guidelines.md`，否则 `index.md` 的 "To fill" 自检无法清零 |
+| 测试暴露的问题 | 单测第一轮 3 条失败，其中 **2 条是我的断言写错**（阿克曼反向转向时内外轮互换；长轴距会收窄角度差，外轮角度反而可能变大），**1 条是断言过度**（`unsubscribe` 后监听器不再被调用，但版本号仍应随状态变化增长）。三条均改为反映真实语义，未修改被测代码 |

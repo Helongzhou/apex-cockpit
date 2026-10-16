@@ -1,7 +1,7 @@
 # Apex Cockpit · 车载座舱 HMI / 智驾可视化
 
 > 基于 **Three.js 0.185 + Rapier 0.20** 的座舱驾驶 Demo，正在二次开发为面向 **座舱工程师（3D 可视化）** 岗位的作品集项目。
-> 当前状态：**基线梳理完成，二次开发进行中**（本仓库尚未包含仪表盘 / ADAS 可视化功能，见下方"路线图"）。
+> 当前状态：**迭代 1 已完成** —— 已从无构建的 Vue 版迁移到 **Vite + TypeScript(strict) + React 19**，行为逐帧等价（601 帧物理状态零差异），运行时加固（错误边界 / 上下文丢失恢复 / 加载重试 / 重置资源不泄漏），首屏 gzip **1,333.9 kB → 72.9 kB**。仪表盘与 ADAS 可视化在迭代 2–3（见"路线图"）。
 >
 > [English baseline README](README.en.md)（上游英文原版，保留作移植记录）
 
@@ -22,19 +22,22 @@
 ## 二、快速开始
 
 ```bash
-# 任意静态服务器均可；package.json 里有 5 个脚本，其中 start / serve / dev 是同一个 Python 服务器
-python3 -m http.server 8080     # 或 npm start / npm run serve-node / npm run serve-php
+npm install          # Node >= 22.12
+npm run dev          # 开发服务器（Vite，默认 http://localhost:5173）
+npm run build        # 产出静态 dist/（可直接用任意静态服务器托管）
+npm run preview      # 预览构建产物（http://localhost:8080）
 ```
 
-然后打开 <http://localhost:8080>。
+打开终端提示的地址即可。`dist/` 是纯静态产物，也可用 `python3 -m http.server 8080 --directory dist` 之类的方式托管。
 
 | 前置条件 | 说明 |
 |---|---|
-| 现代浏览器 | 需要 import map 支持：Chrome 89+ / Firefox 108+ / Safari 16.4+ |
-| **必须经 HTTP 访问** | ES Module + import map 在 `file://` 下会被 CORS 拒绝 |
-| **首次加载需联网** | Three.js / Rapier / Vue / Draco 解码器全部从 CDN 拉取 |
+| Node.js | ≥ 22.12（构建与测试） |
+| 现代浏览器 | 需要 WebGL2 与 ES2022：Chrome 89+ / Firefox 108+ / Safari 16.4+ |
+| **必须经 HTTP 访问** | ES Module 在 `file://` 下会被 CORS 拒绝 |
+| **离线可用** | 所有运行期资源（three / Rapier wasm / Draco / GLB）都由构建产出，产物中不含任何 CDN 引用（`grep -rlo "cdn.jsdelivr.net\|unpkg.com" dist/` 为空） |
 
-> ⚠️ 已知文档不一致（本次已修正）：上游 README 写的是 `8000` 端口，`package.json` 里实际是 `8080`。
+> ⚠️ 已知文档不一致（已修正）：上游 README 写的是 `8000` 端口，`package.json` 里实际是 `8080`；上游提到的 `game/wheel-visuals.js` 在仓库中并不存在。
 
 ### 操作方式
 
@@ -96,6 +99,9 @@ apex-cockpit/
 ---
 
 ## 五、架构梳理
+
+> 本节描述的是**迁移前的上游基线**（Vue 全局构建 + 无打包 + import map），用于说明"改造前是什么样"。
+> 迁移后的结构与对照见 §十二「迭代 1 交付说明」。
 
 ### 5.1 分层与依赖方向
 
@@ -318,9 +324,46 @@ node scripts/measure-budget.mjs dist                                # 包体 + d
 
 本项目源码基于 **MIT License**（见 [LICENSE](LICENSE)）。
 
-- **上游基线**：本仓库是 [manuelhintermayr/three-js-car-example](https://github.com/manuelhintermayr/three-js-car-example)（MIT，作者 Manuel Hintermayr）的二次开发，而上游本身是 [babylon-js-car-example](https://github.com/manuelhintermayr/babylon-js-car-example) 从 Babylon.js + Havok 到 Three.js + Rapier 的移植。Vue 组件与样式表沿用上游。
+- **上游基线**：本仓库是 [manuelhintermayr/three-js-car-example](https://github.com/manuelhintermayr/three-js-car-example)（MIT，作者 Manuel Hintermayr）的二次开发，而上游本身是 [babylon-js-car-example](https://github.com/manuelhintermayr/babylon-js-car-example) 从 Babylon.js + Havok 到 Three.js + Rapier 的移植。**样式表（`css/`）逐字节沿用上游**；上游的 Vue 组件已在迭代 1 改写为 React（逻辑与 DOM 结构保持一致，见 §十二）。
 - **第三方示例代码**：车辆物理与相机控制源自 Babylon.js Playground 公开示例（[#ANV5OM#139](https://www.babylonjs-playground.com/#ANV5OM#139)、[#FMQX86#1](https://playground.babylonjs.com/#FMQX86#1)）；选择性辉光合成源自 Three.js 官方示例 `webgl_postprocessing_unreal_bloom_selective`（MIT）。
-- **第三方库**：Three.js（MIT）、Rapier（Apache-2.0）、Vue.js（MIT），均运行时从 CDN 加载。
+- **第三方库**：Three.js（MIT）、Rapier（Apache-2.0）、React（MIT）。**迭代 1 起全部本地打包**，产物中不含 CDN 引用。
 - **3D 模型**：`game/models/car.glb` 是 Manuel Hintermayr 手作的低多边形 Ford Anglia，**不在代码许可范围内**，按 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 第 4 节的要求单独署名。
 
 详细分项声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
+---
+
+## 十二、迭代 1 交付说明（已完成）
+
+### 12.1 做了什么
+
+| 项 | 内容 | 证据 |
+|---|---|---|
+| 工具链迁移 | 无构建 + import map → **Vite 8 + TypeScript 7(strict) + React 19**，13 个游戏模块全部加类型（起点 579 条编译错误 → 0），禁用 `any` / `@ts-ignore` | `npm run typecheck` |
+| UI 重写 | 4 个 Vue 组件 → 6 个 React 组件；`vue-app.js` 的响应式容器 → 111 行薄 store + `useSyncExternalStore` | `src/ui/`、`src/state.ts` |
+| 行为等价 | 601 帧脚本化输入下与归档基线**逐帧零差异**（不只是"在容差内"） | `npm run deterministic` |
+| 运行时加固 | 渲染循环错误边界、WebGL 上下文丢失的应用层暂停与重建、可重试且可见的加载、重置串行化、监听器统一释放 | `npm run stability`（22/22） |
+| 包体优化 | 首屏 1,333.9 → **72.9 kB gzip**；Rapier 换非 compat 构建，wasm 变成可独立缓存的 748 kB(gzip) 资产；draw call 82 → 76 | `node scripts/measure-budget.mjs dist` |
+| 工程化 | 4 个可执行验证脚本（UI 冒烟 / 故障注入 / 确定性回归 / 预算测量）、45 个单测（覆盖率 93.3%）、6 份按真实代码回填的前端规范 | `scripts/`、`tests/`、`.trellis/spec/frontend/` |
+
+### 12.2 迁移后的分层
+
+```
+index.html → src/main.tsx → src/ui/App.tsx（React 外壳，首屏 72.9 kB gzip）
+                │  动态 import()
+                ▼
+        src/game-bridge.ts ──► game/three-game.ts（懒加载 chunk：three + 游戏逻辑 166.5 kB gzip）
+                                    │
+                                    ├─ game/game-session.ts   每帧更新：输入 → 物理 → 视觉 → 相机 → 遥测 → 探针
+                                    ├─ game/physics-world.ts  Rapier（wasm 747.9 kB gzip，独立资产）
+                                    └─ game/math/             纯函数（单测覆盖 100%）
+src/state.ts  ◄── 唯一的跨层接缝：game/ 写 GameHost，React 只读
+```
+
+### 12.3 已知限制（诚实记录）
+
+1. **总包 gzip 约 1,022 kB，未达 0.9 MB 目标**：Rapier 的 wasm 本身压缩后仍有 748 kB，属物理引擎的不可压缩下限（详见 `.trellis/tasks/archive/2026-10/10-15-bundle-budget/implement.md`）。
+2. **Draco 解码器在产物里有两套**（约 315 kB gzip，其中一半运行时用不到）：three 在模块作用域对 `libs/draco/` 与 `libs/draco/gltf/` 都做了 `new URL` 引用，打包器只能两套都产出。
+3. **帧率未在真实车机/独显环境验证**：本仓库的自动化检查跑在无头软件渲染（SwiftShader）下，只能作为功能回归，不能作为性能结论。
+4. **上下文丢失的可见延迟约 1.85 s**：来自浏览器异步派发 `webglcontextlost` 本身，我方处理在同一事件回调内完成（恢复耗时 174 ms）。
+
