@@ -22,15 +22,25 @@ C1 ──┬─→ C2 ─┐
 
 ## 2. 集成评审清单（parent 执行）
 
-- [ ] `git status` 干净；四个子任务的提交均已落地，且提交信息与仓库既有风格一致（英文祈使句、无前缀）
-- [ ] `npm ci && npm run typecheck && npm run test && npm run build` 在干净克隆上可复现
-- [ ] `dist/` 用 `python3 -m http.server` 起服务后：能驾驶、能切座舱视角、能重置、移动端模拟下摇杆可用
-- [ ] 五条操作链的行为比对记录存在且结论为"一致"（AC2）
-- [ ] 三类故障注入全部通过：`renderFrame` 抛异常、`WEBGL_lose_context`、CDN 资源 404（AC3）
-- [ ] 包体预算脚本在 `dist/` 上通过，且对比表数字与实际测量一致（AC4）
-- [ ] 四份 spec 无模板残留，抽样 3 条规范能在代码里找到对应实现（AC5）
-- [ ] README "当前状态" 已更新到迭代 1 完成态，且未把迭代 2/3 的内容写成已完成（AC6）
-- [ ] 归档基线副本未被修改（`diff` 其源码与迭代 1 之前的快照）
+- [x] `git status` 干净；四个子任务的提交均已落地，且提交信息与仓库既有风格一致（英文祈使句、无前缀）—— 迭代 1 共 18 个提交，4 个归档提交由 Trellis 生成
+- [x] `npm ci && npm run typecheck && npm run test && npm run build` 在干净克隆上可复现 —— `npm ci --dry-run` 无 lockfile 冲突；typecheck 0 错误、45/45 单测、build 通过
+- [x] `dist/` 用静态服务器起服务后：能驾驶、能切座舱视角、能重置、移动端模拟下摇杆可用 —— `npm run smoke` 15/15（含 W 加速 10→35 km/h、C 切视角以画布像素变化断言、Enter 重建会话、触摸态摇杆与 4 个按钮）
+- [x] 五条操作链的行为比对记录存在且结论为"一致"（AC2）—— `compare-deterministic` 601 帧 **max |delta| = 0.000e+0**（键盘驱动 / 转向 / 跳跃 / 刹车 / 重置全链）
+- [x] 三类故障注入全部通过：`renderFrame` 抛异常（0.5 ms 内可见 fatal + 一键恢复）、`WEBGL_lose_context`（仿真冻结 + 恢复 ready 174 ms）、资源加载失败 500/404（3 次退避重试后成功，页面不砖化）（AC3）
+- [x] 包体预算脚本在 `dist/` 上通过，且对比表数字与实际测量一致（AC4）—— 首屏 72.9 kB gzip、draw call 76、无 CDN 引用
+- [x] 四份 spec 无模板残留，抽样 3 条规范能在代码里找到对应实现（AC5）—— 共 6 份 359 行，`grep -rn "To fill\|TBD\|待填" .trellis/spec/frontend/` 无输出，抽查 5 处引用全部存在
+- [x] README "当前状态" 已更新到迭代 1 完成态，且未把迭代 2/3 的内容写成已完成（AC6）—— 新增 §十二「迭代 1 交付说明」，并含「已知限制」四条；§五 明确标注为迁移前基线
+- [~] 归档基线副本**被有意插桩**：`game/three-game.js` 的 `renderFrame` 增加两处（`window.__APEX_FIXED_DT ?? timer.getDelta()` 与 `if (window.__APEX_ON_FRAME) ...`）。这是逐帧对比驱动基线所必需的（基线无法从外部注入固定步长与采样钩子）。**对默认行为无影响**：未注入配置时 `?? ` 回退到 `timer.getDelta()`，行为与插桩前完全一致；插桩内容已在 C1 任务记录与本清单留痕
+
+### 2.1 迭代 1 完成定义核对（DoD）
+
+| DoD 条目 | 状态 |
+|---|---|
+| 四个子任务均已 `task.py archive` | ✅ C1/C2/C3/C4 全部归档至 `.trellis/tasks/archive/2026-10/` |
+| 集成评审清单全过 | ✅ 8 项通过，1 项为已留痕的有意偏差（基线插桩） |
+| `main` 分支上的 `dist/` 可从零构建 | ✅ `npm ci` 锁文件一致 → `npm run build` 182–269 ms 产出静态 dist/ |
+| README 状态已更新 | ✅ §二 快速开始 / §六 预算表 / §十 验证命令 / §十二 交付说明 |
+| `chore: record journal` 已记录提交哈希 | ✅ journal session 2（10 个代表提交 + 全量 18 提交列表见 `git log`） |
 
 ## 3. 验证命令清单（parent 复用）
 

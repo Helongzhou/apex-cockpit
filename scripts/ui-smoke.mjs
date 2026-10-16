@@ -101,11 +101,14 @@ const check = (name, passed, detail = '') => {
     await page.keyboard.up('w');
     check('holding W increases speed', parseFloat(movedSpeed) > 0, `${speedText.trim()} -> ${movedSpeed.trim()}`);
 
-    // C toggles the cockpit view (surfaced through the desktop controls highlight).
-    await page.keyboard.down('c');
-    await page.waitForTimeout(50);
-    check('C key highlight reacts', await page.locator('.key-display.c.active').count() === 1);
-    await page.keyboard.up('c');
+    // C toggles the cockpit view. The camera rig has no DOM surface, so the frame itself is the
+    // observable: the rendered pixels must change when the view switches.
+    const beforeToggle = await page.locator('#renderCanvas').screenshot();
+    await page.keyboard.press('c');
+    await page.waitForTimeout(1200);
+    const afterToggle = await page.locator('#renderCanvas').screenshot();
+    check('C switches the camera view', !beforeToggle.equals(afterToggle),
+        `${beforeToggle.length} -> ${afterToggle.length} bytes`);
 
     // Enter rebuilds the session. The position readout is not a usable signal here: the demo
     // spawns facing the knockable boxes, so the car can be back near the origin after driving.
