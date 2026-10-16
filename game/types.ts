@@ -21,6 +21,15 @@ export interface BoxStatus {
     knocked: boolean;
 }
 
+/**
+ * Domain events published on the state bus. Consumers no longer poll for them: the HUD counters
+ * and the future ADAS layers subscribe instead (task D1, AC-D1.6).
+ */
+export type GameEvent =
+    | { type: 'collision'; speedDropMps: number; total: number }
+    | { type: 'boxKnocked'; box: string; distanceMeters: number; total: number }
+    | { type: 'raceStart' };
+
 export interface Vec3 {
     x: number;
     y: number;

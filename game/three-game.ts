@@ -171,6 +171,10 @@ export function resetGame(host: GameHost): Promise<void> {
 
 async function runReset(host: GameHost): Promise<void> {
     console.log('🔄 Resetting game using Three.js + Rapier...');
+    // A reset disposes the session and rebuilds it: the UI must say so, otherwise input pressed
+    // in that window reaches the old (disposed) controls and is silently dropped.
+    host.runtime.phase = 'loading';
+    host.runtime.message = '正在重置…';
 
 
     renderer.setAnimationLoop(null);

@@ -71,12 +71,33 @@
 | 金标准工作流 | 新增 `baselines/physics-golden.json`（601 帧）+ `npm run golden` / `npm run frame-rate`；`compare-deterministic.mjs` 头部说明"有意行为变更需同提交重录并说明原因，禁止放宽容差"。金标准复跑严格可复现（0.000e+0） |
 | 与迭代 1 基线的差异 | 首帧分歧 frame 11，最大 6.19e+1（vy）。**这不是回归**：输入采样模型由"渲染帧边界"改为"物理子步网格"，且修了转向上限。迭代 1 的归档基线继续作为历史证据保留 |
 
-### 尚未完成（D1 保持 in_progress）
+### 已完成（步骤 1–8 全部）
 
-| 步骤 | 状态 |
-|---|---|
-| 步骤 3：`game-session` 每帧组装 sample → `deriveVehicleState` → `bus.publish`；`telemetry` 退化为消费者（事件 + 20 Hz 快照） | ⬜ 未接线（`vehicle-state` 目前只有单测覆盖，尚未进入运行时） |
-| 步骤 5：HUD 显示值改为经 `units.ts` 换算（当前 HUD 仍是原始世界单位） | ⬜ 未接线 |
-| 步骤 6：`?replay=` 最小接线（`createReplaySource` 已实现并有测试） | ⬜ 未接线 |
-| AC-D1.5 数据可插拔（UI 零改动消费回放） | ⬜ 待步骤 6 完成后验收 |
-| AC-D1.6 事件化 | ⬜ 待步骤 3 完成后验收 |
+**运行时接线（步骤 3/5/6）**
+
+| 项 | 实现 | 证据 |
+|---|---|---|
+| 状态推导进运行时 | `GameSession.publishVehicleState()` 每帧组装 `VehicleSample`（位置 / 速度 / 航向 / 转向角 / 质量 / 轴距）→ `deriveVehicleState(上一帧状态, sample, dt, 碰撞标志)` → `bus.publish()` | `game/game-session.ts` |
+| 总线是唯一数据源 | `GameSession` 持有 `StateBus<VehicleState, GameEvent>`；`Telemetry` 不再自己采样车，改为**订阅**总线（`bus.subscribe` + `bus.onEvent`） | `game/telemetry.ts` |
+| 单位进 HUD（修 U1/U2） | HUD 车速 = `state.speedKmh`（物理 km/h），位置 = `state.positionMeters`（米），阈值全部由 `worldSpeedToMps` / `worldUnitsToMeters` 换算自原世界单位常量 | 浏览器实测：按住 W 后 11.3 → 25.4 → 40.6 → 56.0 **km/h**（此前是原始世界单位被当成 km/h 显示） |
+| 事件化（AC-D1.6） | `collision` / `boxKnocked` / `raceStart` 作为 `GameEvent` 发布；HUD 计数由事件驱动，不再轮询 | `tests/telemetry.test.ts` 7 例 + 运行时日志 `Collision detected! Speed change: 67.55 km/h, Total collisions: 1` |
+| 数据可插拔（AC-D1.5） | `src/dev/replay-source.ts` + `isReplayMode()`：`window.__APEX_REPLAY` 存在时 **完全不加载游戏模块**，由录制帧驱动同一份 `GameHost` 字段 | `ui-smoke` 新增 4 项：ready 态到达、HUD 显示录制值 **36.0 km/h**、**未加载 three-game chunk**、无页面错误 |
+
+**验收结果**
+
+| AC | 判据 | 实测 | 判定 |
+|---|---|---|---|
+| AC-D1.1 | typecheck 0 错误、用例 ≥25 | 0 错误；**103 用例 / 11 文件** | ✅ |
+| AC-D1.2 | `vehicle-state.ts` 覆盖率 ≥80% | **100%**（`state-bus.ts` 100%、`telemetry.ts` 95.4%、整体 95.9%） | ✅ |
+| AC-D1.3 | 单位换算误差 0 | 严格等式断言（0 / 负值 / 极值 / 往返）；运行时 HUD 实测为 km/h | ✅ |
+| AC-D1.4 | 30/60/144 Hz 曲线一致 | **物理轨迹逐帧位级一致 0.0000**；控制状态 0.000%；相机等效时间常数偏差 ≤0.0254 s | ✅ |
+| AC-D1.5 | 回放与实时可互换，UI 零改动 | 回放模式下 4 项检查通过，且**游戏 chunk 未被加载** | ✅ |
+| AC-D1.6 | 事件化，消费者无需轮询 | 事件订阅单测 7 例 + 运行时日志改为 km/h 输出 | ✅ |
+
+**门禁复核**：`typecheck` 0 错误；`test` 103/103；`build` 通过；`smoke` **19/19**；`stability` **22/22**；金标准 `--compare` **0.000e+0**（遥测/总线重写未触碰物理，这一条本身就是回归证据）。
+
+### 本轮发现的问题
+
+1. **重置竞态的真实成因**：重置期间 UI 不显示任何状态，导致冒烟脚本"等 overlay 消失"实际等于没等，按下的 W 落在会话重建窗口里被丢弃。修法：`runReset` 也进入可见的 `loading` 态（顺带是更好的 UX），并把冒烟的固定墙钟等待改为条件等待（软件渲染下帧率越低，同样墙钟对应的仿真时间越少）。
+2. 测试暴露的两处**我自己写错的断言**（不是代码问题）：同步连发多次 publish 时忽略了 20 Hz 节流；掉速刚好等于阈值（上游是严格大于）。已用可控时钟 + 明确高于阈值的用例修正。
+3. `GameSession.update()` 增加了 `onSubstep` 钩子（回归 harness 用它把输入注入到物理网格上），这与 C2 的 `GameOptions.onSubstep` 形成一条完整的"时间基输入"通道。

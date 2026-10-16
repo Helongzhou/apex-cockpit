@@ -5,6 +5,7 @@ import { loadCarModel, type CarModelData, type PivotPart, type WheelPart } from 
 import { createCarLights } from './car-lights.js';
 import { boxInertia, cylinderInertia, makeAckermann } from './math/vehicle-math.js';
 import { smoothingFactor } from './math/frame-rate.js';
+import { worldUnitsToMeters } from './math/units.js';
 import type { CarVisualState } from './controls.js';
 import type { CockpitRig } from './follow-camera.js';
 
@@ -81,6 +82,10 @@ export interface CarOptions {
     wheelAssemblies: WheelAssembly[];
     cockpit: Cockpit;
     ackermann: (averageAngle: number) => [number, number];
+    /** Chassis mass in kilograms (the rig's tuned value, `CHASSIS.mass`). */
+    massKg: number;
+    /** Distance between the axles in metres, used by the bicycle-model yaw rate. */
+    wheelbaseMeters: number;
 }
 
 export class Car {
@@ -96,12 +101,17 @@ export class Car {
     steeringJoints: { left: RAPIER.RevoluteImpulseJoint; right: RAPIER.RevoluteImpulseJoint };
     _forward: THREE.Vector3;
 
-    constructor({ mesh, body, wheelAssemblies, cockpit, ackermann }: CarOptions) {
+    massKg: number;
+    wheelbaseMeters: number;
+
+    constructor({ mesh, body, wheelAssemblies, cockpit, ackermann, massKg, wheelbaseMeters }: CarOptions) {
         this.mesh = mesh;
         this.body = body;
         this.wheelAssemblies = wheelAssemblies;
         this.cockpit = cockpit;
         this.ackermann = ackermann;
+        this.massKg = massKg;
+        this.wheelbaseMeters = wheelbaseMeters;
         this.gasPress = 0;
         this.brakePress = 0;
         this.shiftPos = 0;
@@ -226,7 +236,15 @@ export async function createCar(scene: THREE.Scene, world: RAPIER.World): Promis
     createCarLights(mesh, model);
     addGlass(mesh, model);
 
-    return new Car({ mesh, body, wheelAssemblies, cockpit, ackermann: makeAckermann(model) });
+    return new Car({
+        mesh,
+        body,
+        wheelAssemblies,
+        cockpit,
+        ackermann: makeAckermann(model),
+        massKg: CHASSIS.mass,
+        wheelbaseMeters: worldUnitsToMeters(2 * model.halfWheelbase)
+    });
 }
 
 /** Adds the window glass as a separate translucent mesh so the body itself stays opaque. */

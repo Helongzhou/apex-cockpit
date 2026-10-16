@@ -15,6 +15,7 @@ export default defineConfig({
                 'game/loading.ts',
                 'game/vehicle-state.ts',
                 'game/state-bus.ts',
+                'game/telemetry.ts',
                 'src/state.ts'
             ],
             reporter: ['text', 'text-summary']

@@ -9,7 +9,9 @@ import { createCar, type Car } from './car.js';
 import { createEnvironment, type Environment } from './world.js';
 import { CarControls } from './controls.js';
 import { Telemetry } from './telemetry.js';
-import type { GameHost } from './types.js';
+import { createStateBus, type StateBus } from './state-bus.js';
+import { createInitialVehicleState, deriveVehicleState, type VehicleSample, type VehicleState } from './vehicle-state.js';
+import type { GameEvent, GameHost } from './types.js';
 
 const BACKGROUND_COLOR = [0.95, 0.95, 0.95] as const;
 // Babylon.js direction (1, 1, 0) with the X axis mirrored for the right-handed world
@@ -36,6 +38,8 @@ export class GameSession {
     telemetry: Telemetry;
     followCamera: FollowCamera;
     reflectionProbe: ReflectionProbe;
+    /** Single source of truth for the physical state; the HUD and the ADAS layers consume it. */
+    bus: StateBus<VehicleState, GameEvent>;
     /** While paused, `update()` does nothing: used while the WebGL context is lost. */
     paused: boolean;
 
@@ -55,7 +59,8 @@ export class GameSession {
         this.environment = environment;
         this.stepper = new PhysicsStepper(world);
         this.controls = new CarControls(car, host);
-        this.telemetry = new Telemetry({ car, boxes: environment.boxes, host, physicsClock: this.stepper });
+        this.bus = createStateBus<VehicleState, GameEvent>(createInitialVehicleState());
+        this.telemetry = new Telemetry({ host, boxes: environment.boxes, bus: this.bus, physicsClock: this.stepper });
 
         this.followCamera = new FollowCamera(canvas);
         this.followCamera.lockTarget(car.mesh);
@@ -94,8 +99,27 @@ export class GameSession {
         this.car.syncMeshes();
         this.environment.syncMeshes();
         this.followCamera.update(deltaSeconds);
-        this.telemetry.update();
+        this.publishVehicleState(deltaSeconds);
         this.reflectionProbe.update(this.renderer, this.scene);
+    }
+
+    /**
+     * Samples the simulation, derives the **physical** state and publishes it. Publishing notifies
+     * the telemetry consumer synchronously, so the HUD sees exactly the state the physics produced.
+     */
+    publishVehicleState(deltaSeconds: number): void {
+        const velocity = this.car.linearVelocity();
+        const sample: VehicleSample = {
+            position: this.car.position,
+            velocity: { x: velocity.x, y: velocity.y, z: velocity.z },
+            yaw: this.car.yaw(),
+            steerAngle: this.controls.currentSteeringAngle,
+            massKg: this.car.massKg,
+            wheelbaseMeters: this.car.wheelbaseMeters
+        };
+        // `justCollided` comes from the previous snapshot's detection: collisions are reported as
+        // events, and the flag lets the next state carry the same fact for one frame.
+        this.bus.publish(deriveVehicleState(this.bus.getState(), sample, deltaSeconds, this.telemetry.justCollided));
     }
 
     pause(): void {
@@ -124,6 +148,7 @@ export class GameSession {
     }
 
     dispose(): void {
+        this.telemetry.dispose();
         this.controls.dispose();
         this.followCamera.dispose();
         // The reflection probe is shared and outlives the session; it is released by

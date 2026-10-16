@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import type { GameHost } from '../../game/types.js';
 import type { GameOptions } from '../game-bridge';
 import { loadGame } from '../game-bridge';
+import { isReplayMode, startReplay } from '../dev/replay-source';
 import type { Store } from '../state';
 import { useGameState } from '../hooks/useGameState';
 import { useTouchDevice } from '../hooks/useTouchDevice';
@@ -29,6 +30,15 @@ export function App({ store, host, options }: AppProps) {
 
     useEffect(() => {
         let disposed = false;
+        // Replay mode exercises the pluggable data source: the recorded frames drive the same host
+        // fields and the game module is never loaded (AC-D1.5).
+        if (isReplayMode()) {
+            const stop = startReplay(host);
+            return () => {
+                disposed = true;
+                stop();
+            };
+        }
         void loadGame().then(game => {
             // The effect may already have been cleaned up while the chunk was loading.
             if (!disposed) {

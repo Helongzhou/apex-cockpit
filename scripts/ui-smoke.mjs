@@ -94,12 +94,20 @@ const check = (name, passed, detail = '') => {
     await page.waitForFunction(() => document.querySelector('.runtime-overlay') === null, undefined, { timeout: 90_000 });
     await page.waitForTimeout(1500);
 
-    // Key press drives the car: speed readout must grow after holding W.
+    // Key press drives the car. The wait is condition-based on purpose: under software rendering
+    // the frame rate (and therefore the simulated time per wall-clock second) varies, so a fixed
+    // timeout is flaky.
+    const speedOf = () => page.locator('.panel-left .stat-value-large').first().innerText();
+    const speedBefore = await speedOf();
     await page.keyboard.down('w');
-    await page.waitForTimeout(2500);
-    const movedSpeed = await page.locator('.panel-left .stat-value-large').first().innerText();
+    const moved = await page.waitForFunction(
+        () => parseFloat(document.querySelector('.panel-left .stat-value-large')?.textContent ?? '0') > 0,
+        undefined,
+        { timeout: 30_000 }
+    ).then(() => true).catch(() => false);
+    const speedAfter = await speedOf();
     await page.keyboard.up('w');
-    check('holding W increases speed', parseFloat(movedSpeed) > 0, `${speedText.trim()} -> ${movedSpeed.trim()}`);
+    check('holding W increases speed', moved, `${speedBefore.trim()} -> ${speedAfter.trim()}`);
 
     // C toggles the cockpit view. The camera rig has no DOM surface, so the frame itself is the
     // observable: the rendered pixels must change when the view switches.
@@ -140,6 +148,44 @@ const check = (name, passed, detail = '') => {
         `active ${before?.active} -> ${after?.active} (added ${before?.added} -> ${after?.added})`
     );
 
+    await page.close();
+}
+
+/**
+ * Pluggable data source (AC-D1.5): a recorded snapshot sequence drives the HMI while the game
+ * module is never loaded - the UI code is untouched.
+ */
+{
+    const page = await browser.newPage({ viewport: { width: 1024, height: 700 } });
+    const errors = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.addInitScript(() => {
+        const frames = [0, 1, 2, 3, 4].map(index => ({
+            speedMps: 10,
+            speedKmh: 36,
+            accelLongitudinal: 0,
+            accelLateral: 0,
+            yawRate: 0,
+            yawRad: index * 0.1,
+            yawRateTheoretical: 0,
+            steerAngleDeg: 0,
+            powerKw: 0,
+            gear: 'D',
+            positionMeters: { x: index, y: 0, z: -index },
+            collision: false
+        }));
+        window.__APEX_REPLAY = { intervalSeconds: 1 / 60, frames };
+    });
+    await page.goto(`http://127.0.0.1:${port}/`, { waitUntil: 'load' });
+    await page.waitForFunction(() => document.querySelector('.runtime-overlay') === null, undefined, { timeout: 30_000 });
+    await page.waitForTimeout(1200);
+
+    const replaySpeed = await page.locator('.panel-left .stat-value-large').first().innerText().catch(() => '(hidden)');
+    check('replay mode reaches the ready state', await page.locator('.runtime-overlay').count() === 0);
+    check('recorded frames drive the HUD without the game module', replaySpeed.includes('36.0'), replaySpeed.trim());
+    check('replay mode loads no game chunk', await page.evaluate(() => ![...document.querySelectorAll('script')].some(tag => (tag.src || '').includes('three-game'))
+        && performance.getEntriesByType('resource').every(entry => !entry.name.includes('three-game'))));
+    check('replay mode has no page errors', errors.length === 0, errors.slice(0, 2).join(' | '));
     await page.close();
 }
 

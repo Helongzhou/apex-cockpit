@@ -76,15 +76,15 @@ export function InfoPanel({ store, isTouchDevice }: { store: Store<GameHost>; is
                         <div className="stat-value-large stat-value-green">{state.speed.toFixed(1)} km/h</div>
                     </div>
                     <div className="stat-box">
-                        <div className="stat-label">Position X</div>
+                        <div className="stat-label">Position X (m)</div>
                         <div className="stat-value">{state.position.x.toFixed(2)}</div>
                     </div>
                     <div className="stat-box">
-                        <div className="stat-label">Position Y</div>
+                        <div className="stat-label">Position Y (m)</div>
                         <div className="stat-value">{state.position.y.toFixed(2)}</div>
                     </div>
                     <div className="stat-box">
-                        <div className="stat-label">Position Z</div>
+                        <div className="stat-label">Position Z (m)</div>
                         <div className="stat-value">{state.position.z.toFixed(2)}</div>
                     </div>
                     <div className="stat-box">
