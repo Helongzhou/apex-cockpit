@@ -6,12 +6,13 @@ import { createPhysicsWorld, PhysicsStepper } from './physics-world.js';
 import { disposeSharedReflectionProbe, sharedReflectionProbe, ReflectionProbe } from './rendering.js';
 import { FollowCamera } from './follow-camera.js';
 import { createCar, type Car } from './car.js';
-import { createEnvironment, type Environment } from './world.js';
+import type { Environment } from './world.js';
+import { DEFAULT_STAGE, stageDefinition } from './scenes/index.js';
 import { CarControls } from './controls.js';
 import { Telemetry } from './telemetry.js';
 import { createStateBus, type StateBus } from './state-bus.js';
 import { createInitialVehicleState, deriveVehicleState, type VehicleSample, type VehicleState } from './vehicle-state.js';
-import type { GameEvent, GameHost } from './types.js';
+import type { GameEvent, GameHost, StageId } from './types.js';
 
 const BACKGROUND_COLOR = [0.95, 0.95, 0.95] as const;
 // Babylon.js direction (1, 1, 0) with the X axis mirrored for the right-handed world
@@ -43,11 +44,17 @@ export class GameSession {
     /** While paused, `update()` does nothing: used while the WebGL context is lost. */
     paused: boolean;
 
-    static async create(canvas: HTMLCanvasElement, renderer: THREE.WebGLRenderer, host: GameHost): Promise<GameSession> {
+    static async create(
+        canvas: HTMLCanvasElement,
+        renderer: THREE.WebGLRenderer,
+        host: GameHost,
+        stage: StageId = DEFAULT_STAGE
+    ): Promise<GameSession> {
         const scene = createScene();
         const world = createPhysicsWorld();
         const car = await createCar(scene, world);
-        const environment = createEnvironment(scene, world);
+        // The stage only decides what the environment looks like; the car physics is shared.
+        const environment = stageDefinition(stage).createEnvironment(scene, world);
         return new GameSession({ canvas, renderer, host, scene, world, car, environment });
     }
 
@@ -96,6 +103,7 @@ export class GameSession {
             onSubstep?.(this.stepper.elapsedSeconds);
         });
         this.car.updateVisuals(this.controls.getVisualState(), this.followCamera.cockpit, deltaSeconds);
+        this.environment.update?.(deltaSeconds);
         this.car.syncMeshes();
         this.environment.syncMeshes();
         this.followCamera.update(deltaSeconds);

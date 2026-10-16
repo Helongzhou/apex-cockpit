@@ -7,8 +7,9 @@ import { createRenderLoop } from './render-loop.js';
 import { createContextMonitor, type ContextMonitor } from './context-monitor.js';
 import { LoadFailure, loadWithRetry } from './loading.js';
 import { GameSession } from './game-session.js';
+import { DEFAULT_STAGE, stageDefinition, stageSummaries } from './scenes/index.js';
 import { FpsMeter } from './fps-meter.js';
-import type { GameHost } from './types.js';
+import type { GameHost, StageId } from './types.js';
 
 const CANVAS_FOCUS_DELAY_MS = 100;
 
@@ -38,6 +39,10 @@ let glowComposer: GlowComposer;
 let fpsMeter: FpsMeter;
 let session: GameSession | null = null;
 let currentHost: GameHost | null = null;
+/** Stage the next session will be built with. */
+let currentStage: StageId = DEFAULT_STAGE;
+/** Application-side cost of the last stage switch (session rebuild, no rendering). */
+let lastSwitchMs = 0;
 let gameOptions: GameOptions = {};
 let frameIndex = 0;
 const timer = new THREE.Timer();
@@ -62,7 +67,12 @@ declare global {
         /** Fault injection for `scripts/stability-check.mjs`: throws on the next frame. */
         __APEX_INJECT_FRAME_ERROR?: (message: string) => void;
         /** Renderer resource counters, used by the stability checks and the perf panel. */
-        __APEX_STATS?: () => { geometries: number; textures: number; programs: number; resizes: number; calls: number; triangles: number };
+        __APEX_STATS?: () => {
+            geometries: number; textures: number; programs: number; resizes: number;
+            calls: number; triangles: number; stage: string;
+            /** Application-side stage-switch cost (session rebuild), excluding the first frame. */
+            lastSwitchMs: number;
+        };
     }
 }
 
@@ -114,7 +124,9 @@ export function initializeGame(host: GameHost, options: GameOptions = {}): void 
         resizes: resizeAppliedCount,
         // Draw calls and triangles of the last completed frame (`info.autoReset` is on).
         calls: renderer.info.render.calls,
-        triangles: renderer.info.render.triangles
+        triangles: renderer.info.render.triangles,
+        stage: currentStage,
+        lastSwitchMs
     });
 
     startGame(host).catch(error => {
@@ -139,6 +151,9 @@ async function startGame(host: GameHost): Promise<void> {
     watchContext();
     setupCanvasFocus();
 
+    // Publish the stage list so the UI renders the switcher without importing the game.
+    host.stages = stageSummaries();
+    host.stage = currentStage;
     host.runtime.phase = 'ready';
     host.runtime.message = '';
     host.runtime.detail = '';
@@ -196,6 +211,23 @@ async function runReset(host: GameHost): Promise<void> {
 }
 
 /**
+ * Switches stage: the next session is built with the new environment. Uses the same serialized,
+ * visibly-loading path as a reset, so a fast double click cannot leave a half-built session.
+ */
+export async function setStage(host: GameHost, stage: StageId): Promise<void> {
+    stageDefinition(stage); // throws early on an unknown id
+    if (stage === currentStage) {
+        return;
+    }
+    currentStage = stage;
+    host.stage = stage;
+    const started = performance.now();
+    await resetGame(host);
+    // Excludes the first rendered frame: this is the rebuild the application is responsible for.
+    lastSwitchMs = performance.now() - started;
+}
+
+/**
  * Rebuilds the game after a fatal error or a lost WebGL context. Idempotent: the host's
  * `retry()` may be clicked repeatedly while a rebuild is in flight.
  */
@@ -250,7 +282,7 @@ function reportFatal(host: GameHost, error: unknown): void {
 
 async function startSession(host: GameHost): Promise<void> {
     host.runtime.message = '正在加载车辆模型…';
-    session = await loadWithRetry({ name: 'model', label: '车辆模型' }, () => GameSession.create(canvas, renderer, host), {
+    session = await loadWithRetry({ name: 'model', label: '车辆模型' }, () => GameSession.create(canvas, renderer, host, currentStage), {
         onAttempt: (attempt, total) => {
             if (attempt > 1) {
                 host.runtime.message = `正在重试加载车辆模型（${attempt}/${total}）`;

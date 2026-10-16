@@ -1,0 +1,2 @@
+{"file": "docs/superpowers/specs/2026-10-15-iteration-plan.md", "reason": "迭代 2 高速舞台交付物与验收（§6.1/§6.2）"}
+{"file": ".trellis/spec/frontend/directory-structure.md", "reason": "game/scenes 分层与 UI 不静态 import 游戏模块的约束"}

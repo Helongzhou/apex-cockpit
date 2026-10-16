@@ -88,6 +88,8 @@ export interface GameHost {
     vehicle: VehicleSnapshot;
     /** Active stage; the switcher writes it through `setStage`. */
     stage: StageId;
+    /** Stages the running build provides; written by the game so the UI never hardcodes them. */
+    stages: Array<{ id: StageId; label: string }>;
     setStage(stage: StageId): void;
     /** Owned by the UI layer, read by `CarControls.combineInputs`. */
     isTouchDevice: boolean;

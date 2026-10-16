@@ -7,7 +7,8 @@
  */
 
 import { loadGame } from './game-bridge';
-import type { GameHost } from '../game/types.js';
+import { isReplayMode } from './dev/replay-source';
+import type { GameHost, StageId } from '../game/types.js';
 import { createStore, type Store } from './state';
 
 const KNOCKABLE_BOX_COUNT = 5;
@@ -43,6 +44,7 @@ export function createInitialGameState(): GameHost {
             collision: false
         },
         stage: 'studio',
+        stages: [],
         setStage: () => undefined,
         runtime: { phase: 'loading', message: '', detail: '' },
         resetGame: () => undefined,
@@ -85,6 +87,21 @@ export function createGameHost(): GameHostRef {
     };
     host.toggleView = () => {
         void loadGame().then(game => game.toggleView());
+    };
+    host.setStage = (stage: StageId) => {
+        if (stage === host.stage) {
+            return;
+        }
+        // Optimistic UI: the switcher highlights immediately; the game rebuilds the session.
+        host.stage = stage;
+        if (isReplayMode()) {
+            return;
+        }
+        void loadGame()
+            .then(game => game.setStage(host, stage))
+            .catch((error: unknown) => {
+                console.error('❌ Stage switch failed:', error);
+            });
     };
     host.retry = () => {
         // recoverGame() contains its own failures; no rejection escapes here.

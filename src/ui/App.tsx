@@ -27,7 +27,7 @@ export interface AppProps {
  * layout, then the control overlays.
  */
 export function App({ store, host, options }: AppProps) {
-    const { isTouchDevice, stage } = useGameState(store);
+    const { isTouchDevice, stage, stages } = useGameState(store);
     // `?cluster=off` exists so the cluster's cost can be measured against the same build.
     const clusterEnabled = new URLSearchParams(window.location.search).get('cluster') !== 'off';
     useTouchDevice(host);
@@ -70,7 +70,7 @@ export function App({ store, host, options }: AppProps) {
             <DesktopControls isTouchDevice={isTouchDevice} />
             <MobileControls host={host} isTouchDevice={isTouchDevice} />
             {clusterEnabled ? <Cluster store={store} /> : null}
-            <StageSwitcher host={host} stage={stage} />
+            <StageSwitcher host={host} stage={stage} stages={stages} />
             <RuntimeOverlay store={store} />
         </>
     );

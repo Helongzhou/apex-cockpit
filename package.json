@@ -26,7 +26,8 @@
     "serve": "python3 -m http.server 8080",
     "frame-rate": "node scripts/frame-rate-compare.mjs dist",
     "golden": "node scripts/compare-deterministic.mjs --dump --dir dist --out baselines/physics-golden.json",
-    "cluster": "node scripts/cluster-check.mjs dist"
+    "cluster": "node scripts/cluster-check.mjs dist",
+    "stage": "node scripts/stage-check.mjs dist"
   },
   "keywords": [
     "threejs",

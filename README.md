@@ -404,6 +404,27 @@ src/state.ts  ◄── 唯一的跨层接缝：game/ 写 GameHost，React 只�
 | 起跳是电平触发 | 按住 0.1 s：144 Hz 加 14 次冲量、30 Hz 只有 3 次 | 改为每秒冲量预算（60/s = 原 60 fps 手感） |
 | 重置期间无任何状态反馈 | 重置窗口内按下的输入落在已销毁的控制器上被静默丢弃 | 重置期间进入可见 `loading` 态 |
 
+### 13.5 高速舞台（已完成）
+
+第二个舞台，也是迭代 3 ADAS 可视化的承载面。
+
+| 内容 | 说明 |
+|---|---|
+| `game/scenes/highway.ts` | 2400 单位长、3 车道、带轻微 S 弯；虚线车道线 / 护栏 / 龙门架 / 路灯全部**合并成单网格**（各 1 个 draw call，静态几何模块级缓存） |
+| `game/math/highway-path.ts` | 确定性中心线（纯函数）：场景几何、前车巡航、迭代 3 的车道可视化共用同一条路径 |
+| kinematic 前车 | 沿路径以 26 单位/s 巡航，`kinematicPositionBased` 刚体（玩家可撞上，它继续行驶）；作为迭代 3 的 ADAS 目标 |
+| 舞台注册表 | `game/scenes/index.ts`：`StageId → { label, createEnvironment }`；游戏启动时把列表写入 `host.stages`，**UI 不静态 import 游戏模块**（保住首屏 72.9 kB） |
+| 切换 | 复用重置的串行化 + 可见 loading 态，双击不会留下半成品会话 |
+
+**实测（`npm run stage` 12/12）**：
+
+| 指标 | 值 |
+|---|---|
+| 应用自身重建耗时 | 冷 **5.7 ms** / 热中位数 **2.2 ms**（预算 200 ms） |
+| 用户感知耗时（软件渲染） | 中位数 **955 ms** —— 由首帧几何上传与阴影/探针重算主导，非应用逻辑 |
+| 20 次切换后资源 | geometries 45→45、textures 21→21、programs 20→20、listeners 20→20（零泄漏） |
+| 回归 | 金标准影棚前缀 301 帧 **0.000e+0**、smoke 21/21、stability 22/22 |
+
 ### 13.4 数字仪表（已完成）
 
 DOM/CSS overlay，**不引入第二个渲染上下文**（页面仍只有 1 个 canvas，仪表目录内无 `getContext`/`<canvas>`）。

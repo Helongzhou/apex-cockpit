@@ -2,28 +2,25 @@ import { useEffect, useState } from 'react';
 import type { GameHost, StageId } from '../../game/types.js';
 
 /**
- * Stages the build can switch to. The highway stage lands in task D3; until a second entry
- * exists the switcher renders nothing, so the UI never advertises something that is not there.
+ * Stage switcher. The list comes from `host.stages`, which the game publishes at startup, so the
+ * UI never hardcodes stage ids and this file stays out of the game bundle. With a single stage
+ * nothing is rendered: the UI never advertises something that does not exist.
  */
-export const STAGES: ReadonlyArray<{ id: StageId; label: string }> = [
-    { id: 'studio', label: '影棚' }
-];
-
-/** Stage switcher: writes `host.setStage`, which the game layer resolves to a scene factory. */
-export function StageSwitcher({ host, stage }: { host: GameHost; stage: StageId }) {
+export function StageSwitcher({ host, stage, stages }: { host: GameHost; stage: StageId; stages: Array<{ id: StageId; label: string }> }) {
     const [busy, setBusy] = useState(false);
 
     useEffect(() => {
         setBusy(false);
     }, [stage]);
 
-    if (STAGES.length < 2) {
+
+    if (stages.length < 2) {
         return null;
     }
 
     return (
         <div className="stage-switcher" role="group" aria-label="舞台切换">
-            {STAGES.map(candidate => (
+            {stages.map(candidate => (
                 <button
                     key={candidate.id}
                     type="button"

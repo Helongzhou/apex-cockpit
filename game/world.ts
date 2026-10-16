@@ -6,7 +6,7 @@ import { babylonColor } from './color.js';
 
 // Babylon.js is left-handed, Three.js right-handed: X positions taken from the original are mirrored
 // so the layout looks identical on screen.
-const GROUND_LEVEL = -20;
+export const GROUND_LEVEL = -20;
 const GROUND_THICKNESS = 2;
 const TRACK = { size: 800, friction: 2, color: [0.4, 0.4, 0.4], specular: [0.1, 0.1, 0.1] } as const;
 const WALL = { height: 20, thickness: 2, friction: 0.1, color: [0.95, 0.95, 0.95], specular: [0.1, 0.1, 0.1] } as const;
@@ -91,6 +91,11 @@ export interface Environment {
     boxes: KnockableBox[];
     syncMeshes(): void;
     resetBoxes(): void;
+    /**
+     * Optional per-frame stage logic (the highway drives its kinematic lead vehicle here). The
+     * studio does not implement it, so its behaviour is untouched.
+     */
+    update?(deltaSeconds: number): void;
 }
 
 /**
