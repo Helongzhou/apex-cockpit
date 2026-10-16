@@ -22,6 +22,8 @@ const REFLECTION_LEVEL = 2.2;
 const REFLECTION_NEAR = 1;
 const REFLECTION_FAR = 2000;
 const CUBE_FACES = 6;
+/** Frames between two cube-face updates of the reflection probe (task C3 draw-call budget). */
+const REFLECTION_FACE_INTERVAL = 2;
 
 const MIX_VERTEX_SHADER = `
     varying vec2 vUv;
@@ -58,6 +60,10 @@ export function createRenderer(canvas: HTMLCanvasElement): THREE.WebGLRenderer {
     // multisampled default framebuffer would only be resolved for nothing on every frame
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
     applyPixelRatio(renderer);
+    // Per-frame statistics are accumulated manually (`renderFrame` calls `info.reset()`):
+    // with `autoReset` on, the last `render()` call wins and the counters would only show the
+    // reflection probe's pass instead of the whole frame.
+    renderer.info.autoReset = false;
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFShadowMap;
@@ -160,6 +166,7 @@ export class ReflectionProbe {
     carBody: THREE.Mesh | null;
     nextFace: number;
     hasFullCapture: boolean;
+    sinceLastFace: number;
 
     constructor() {
         this.renderTarget = new THREE.WebGLCubeRenderTarget(REFLECTION_PROBE_SIZE, {
@@ -171,6 +178,7 @@ export class ReflectionProbe {
         this.carBody = null;
         this.nextFace = 0;
         this.hasFullCapture = false;
+        this.sinceLastFace = 0;
     }
 
     attachToMesh(carBody: THREE.Mesh): void {
@@ -185,6 +193,16 @@ export class ReflectionProbe {
         if (!this.carBody) {
             return;
         }
+        // Quality/perf knob: the probe renders one cube face per frame by default, which costs
+        // a full scene pass every frame. Skipping frames makes all six faces refresh every
+        // `CUBE_FACES * REFLECTION_FACE_INTERVAL` frames; for a car body reflection the extra
+        // latency is not perceptible, while the draw calls per frame roughly halve.
+        this.sinceLastFace += 1;
+        if (this.sinceLastFace < REFLECTION_FACE_INTERVAL) {
+            return;
+        }
+        this.sinceLastFace = 0;
+
         const material = this.carBody.material as THREE.Material;
         // The car must not reflect itself, but its lights should still illuminate the reflection
         this.cubeCamera.position.copy(this.carBody.position);

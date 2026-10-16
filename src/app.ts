@@ -6,7 +6,7 @@
  * values and the reset order mirror `vue-app.js` exactly.
  */
 
-import { recoverGame, resetGame, toggleView } from '../game/three-game.js';
+import { loadGame } from './game-bridge';
 import type { GameHost } from '../game/types.js';
 import { createStore, type Store } from './state';
 
@@ -63,18 +63,19 @@ export function createGameHost(): GameHostRef {
 
     host.resetGame = () => {
         resetHostFields(host);
-        // The session rebuild is async; surface failures instead of leaving an
-        // unhandled rejection. Recoverable error handling is task C2's scope.
-        void resetGame(host).catch((error: unknown) => {
-            console.error('❌ Game reset failed:', error);
-        });
+        // The game chunk may still be loading; the call is queued behind it.
+        void loadGame()
+            .then(game => game.resetGame(host))
+            .catch((error: unknown) => {
+                console.error('❌ Game reset failed:', error);
+            });
     };
     host.toggleView = () => {
-        toggleView();
+        void loadGame().then(game => game.toggleView());
     };
     host.retry = () => {
         // recoverGame() contains its own failures; no rejection escapes here.
-        void recoverGame(host);
+        void loadGame().then(game => game.recoverGame(host));
     };
 
     return { store, host };

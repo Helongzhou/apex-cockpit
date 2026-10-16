@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 
-import { initializeGame, disposeGame, type GameOptions } from '../../game/three-game.js';
 import type { GameHost } from '../../game/types.js';
+import type { GameOptions } from '../game-bridge';
+import { loadGame } from '../game-bridge';
 import type { Store } from '../state';
 import { useGameState } from '../hooks/useGameState';
 import { useTouchDevice } from '../hooks/useTouchDevice';
@@ -27,9 +28,21 @@ export function App({ store, host, options }: AppProps) {
     useTouchDevice(host);
 
     useEffect(() => {
-        initializeGame(host, options);
+        let disposed = false;
+        void loadGame().then(game => {
+            // The effect may already have been cleaned up while the chunk was loading.
+            if (!disposed) {
+                game.initializeGame(host, options);
+            }
+        }).catch((error: unknown) => {
+            console.error('❌ Game module failed to load:', error);
+            host.runtime.phase = 'fatal';
+            host.runtime.message = '游戏模块加载失败';
+            host.runtime.detail = error instanceof Error ? error.message : String(error);
+        });
         return () => {
-            disposeGame();
+            disposed = true;
+            void loadGame().then(game => game.disposeGame());
         };
         // Initialised once: the game owns a module-level render loop and a singleton renderer.
         // eslint-disable-next-line react-hooks/exhaustive-deps

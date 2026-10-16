@@ -56,7 +56,7 @@ declare global {
         /** Fault injection for `scripts/stability-check.mjs`: throws on the next frame. */
         __APEX_INJECT_FRAME_ERROR?: (message: string) => void;
         /** Renderer resource counters, used by the stability checks and the perf panel. */
-        __APEX_STATS?: () => { geometries: number; textures: number; programs: number; resizes: number };
+        __APEX_STATS?: () => { geometries: number; textures: number; programs: number; resizes: number; calls: number; triangles: number };
     }
 }
 
@@ -105,7 +105,10 @@ export function initializeGame(host: GameHost, options: GameOptions = {}): void 
         textures: renderer.info.memory.textures,
         programs: renderer.info.programs?.length ?? 0,
         // Applied (not requested) viewport changes: proves the rAF coalescing works.
-        resizes: resizeAppliedCount
+        resizes: resizeAppliedCount,
+        // Draw calls and triangles of the last completed frame (`info.autoReset` is on).
+        calls: renderer.info.render.calls,
+        triangles: renderer.info.render.triangles
     });
 
     startGame(host).catch(error => {
@@ -256,6 +259,9 @@ function renderFrame(): void {
         throw new Error(message);
     }
     timer.update();
+    // `info.autoReset` is off, so the frame's draw calls/triangles are accumulated here and
+    // cover the main pass, the bloom passes, the shadow pass and the reflection probe.
+    renderer.info.reset();
     requestShadowUpdate(renderer);
     session?.update(gameOptions.fixedDeltaSeconds ?? timer.getDelta());
     glowComposer.render();

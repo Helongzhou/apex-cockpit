@@ -1,6 +1,6 @@
 // game-session.ts - One playable round: scene, physics world, car, environment and the per-frame update
 import * as THREE from 'three';
-import type { World } from '@dimforge/rapier3d-compat';
+import type { World } from '@dimforge/rapier3d';
 import { babylonColor } from './color.js';
 import { createPhysicsWorld, PhysicsStepper } from './physics-world.js';
 import { disposeSharedReflectionProbe, sharedReflectionProbe, ReflectionProbe } from './rendering.js';

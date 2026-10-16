@@ -1,0 +1,150 @@
+#!/usr/bin/env node
+/**
+ * measure-budget.mjs - Bundle and runtime budget measurement for task C3.
+ *
+ *   node scripts/measure-budget.mjs [dir]      # default: dist
+ *
+ * Reports, with real numbers rather than estimates:
+ *   - first-screen payload (html + css + the entry chunk, gzip) vs the dynamic game chunks
+ *   - a remote-reference check (a CDN reference in dist/ would break offline cockpit use)
+ *   - runtime counters from the live page: draw calls, triangles, programs, geometries, textures, FPS
+ */
+
+import { createServer } from 'node:http';
+import { readFile, readdir, stat } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
+import { extname, join, resolve } from 'node:path';
+import process from 'node:process';
+
+process.env.PLAYWRIGHT_BROWSERS_PATH ??= join(process.cwd(), '.playwright-browsers');
+const { chromium } = await import('playwright');
+
+const MIME = {
+    '.html': 'text/html; charset=utf-8',
+    '.js': 'text/javascript; charset=utf-8',
+    '.css': 'text/css; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+    '.map': 'application/json; charset=utf-8',
+    '.glb': 'model/gltf-binary',
+    '.wasm': 'application/wasm',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg'
+};
+
+const root = resolve(process.argv[2] ?? 'dist');
+const kb = bytes => `${(bytes / 1024).toFixed(1)} kB`;
+
+/** --- Static payload ------------------------------------------------------------- */
+const html = await readFile(join(root, 'index.html'), 'utf8');
+const entryMatch = html.match(/<script[^>]+src="\.?\/?([^"]+)"/);
+const entryPath = entryMatch ? entryMatch[1].replace(/^\.\//, '') : null;
+
+const assetsDirectory = join(root, 'assets');
+const assetNames = existsSync(assetsDirectory) ? await readdir(assetsDirectory) : [];
+
+const measure = async name => {
+    const body = await readFile(join(assetsDirectory, name));
+    return { name, raw: body.length, gzip: gzipSync(body, { level: 9 }).length };
+};
+
+const chunks = [];
+for (const name of assetNames) {
+    if (!/\.(js|css)$/.test(name)) {
+        continue;
+    }
+    chunks.push(await measure(name));
+}
+chunks.sort((a, b) => b.gzip - a.gzip);
+
+const entry = entryPath ? chunks.find(chunk => entryPath.endsWith(chunk.name)) : undefined;
+const entryCss = chunks.filter(chunk => chunk.name.endsWith('.css'));
+const firstScreen = (entry?.gzip ?? 0) + entryCss.reduce((sum, chunk) => sum + chunk.gzip, 0) + Buffer.byteLength(html, 'utf8');
+
+console.log('--- payload ---');
+console.log(`html (index.html)                ${kb(Buffer.byteLength(html, 'utf8'))}`);
+for (const chunk of entryCss) {
+    console.log(`css  ${chunk.name.padEnd(28)} ${kb(chunk.raw).padStart(10)} raw / ${kb(chunk.gzip)} gzip`);
+}
+if (entry) {
+    console.log(`entry ${entry.name.padEnd(27)} ${kb(entry.raw).padStart(10)} raw / ${kb(entry.gzip)} gzip`);
+}
+console.log(`FIRST SCREEN (html+css+entry):   ${kb(firstScreen)} gzip`);
+console.log('dynamic chunks (fetched on demand):');
+for (const chunk of chunks) {
+    if (chunk === entry || entryCss.includes(chunk)) {
+        continue;
+    }
+    console.log(`  ${chunk.name.padEnd(32)} ${kb(chunk.raw).padStart(10)} raw / ${kb(chunk.gzip)} gzip`);
+}
+for (const name of assetNames) {
+    if (!name.endsWith('.wasm')) {
+        continue;
+    }
+    const file = await stat(join(assetsDirectory, name));
+    const body = await readFile(join(assetsDirectory, name));
+    console.log(`  ${name.padEnd(32)} ${kb(file.size).padStart(10)} raw / ${kb(gzipSync(body, { level: 9 }).length)} gzip (streamed)`);
+}
+for (const name of assetNames) {
+    if (name.endsWith('.glb')) {
+        const file = await stat(join(assetsDirectory, name));
+        console.log(`  ${name.padEnd(32)} ${kb(file.size).padStart(10)} raw`);
+    }
+}
+
+/** --- Remote reference check ----------------------------------------------------- */
+const offenders = [];
+for (const name of assetNames) {
+    if (!/\.(js|css|html)$/.test(name)) {
+        continue;
+    }
+    const body = await readFile(join(assetsDirectory, name), 'utf8');
+    if (body.includes('cdn.jsdelivr.net') || body.includes('unpkg.com')) {
+        offenders.push(name);
+    }
+}
+console.log(`remote references in dist: ${offenders.length === 0 ? 'none' : offenders.join(', ')}`);
+
+/** --- Runtime counters ----------------------------------------------------------- */
+const server = createServer(async (request, response) => {
+    const url = new URL(request.url ?? '/', 'http://localhost');
+    let filePath = join(root, decodeURIComponent(url.pathname));
+    if (url.pathname.endsWith('/')) {
+        filePath = join(filePath, 'index.html');
+    }
+    if (!existsSync(filePath)) {
+        response.writeHead(404).end('not found');
+        return;
+    }
+    response.writeHead(200, { 'content-type': MIME[extname(filePath)] ?? 'application/octet-stream' });
+    response.end(await readFile(filePath));
+});
+await new Promise(ready => server.listen(0, '127.0.0.1', ready));
+
+const browser = await chromium.launch({
+    args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--disable-gpu-sandbox']
+});
+const page = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+await page.goto(`http://127.0.0.1:${server.address().port}/`, { waitUntil: 'load' });
+await page.waitForFunction(() => document.querySelector('.runtime-overlay') === null, undefined, { timeout: 90_000 });
+await page.waitForTimeout(4000); // let the camera settle behind the car
+
+const samples = [];
+for (let step = 0; step < 5; step += 1) {
+    samples.push(await page.evaluate(() => ({
+        ...window.__APEX_STATS(),
+        fps: parseFloat(document.querySelector('.fps-counter')?.textContent ?? '0')
+    })));
+    await page.waitForTimeout(1000);
+}
+const worst = key => Math.max(...samples.map(sample => sample[key]));
+console.log('\n--- runtime (headless SwiftShader software rendering) ---');
+console.log(`draw calls / frame : max ${worst('calls')}`);
+console.log(`triangles / frame  : max ${worst('triangles')}`);
+console.log(`shader programs    : ${samples.at(-1).programs}`);
+console.log(`geometries         : ${samples.at(-1).geometries}`);
+console.log(`textures           : ${samples.at(-1).textures}`);
+console.log(`fps                : ${samples.map(sample => sample.fps).join(', ')}`);
+
+await browser.close();
+server.close();

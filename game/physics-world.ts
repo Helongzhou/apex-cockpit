@@ -1,5 +1,5 @@
 // physics-world.ts - Rapier physics world setup and shared physics helpers
-import RAPIER from '@dimforge/rapier3d-compat';
+import RAPIER from '@dimforge/rapier3d';
 import type { Object3D } from 'three';
 import { cacheOnce } from './loading.js';
 
@@ -17,9 +17,10 @@ export const COLLISION_GROUPS = {
     Environment: (MEMBERSHIP.Environment << 16) | ALL_GROUPS
 };
 
-// Cached once, but a rejection clears the cache so a transient failure can be retried
-// (the previous version cached the rejected promise for the page's whole lifetime).
-const initEngine = cacheOnce(() => RAPIER.init());
+// The non-compat build ships the wasm as a real asset and wires it up on import (there is no
+// `init()` export), so initialisation is just "make sure the module is loaded". The previous
+// compat build inlined the same wasm as base64 inside a 2.8 MB JS file.
+const initEngine = cacheOnce(() => import('@dimforge/rapier3d').then(() => undefined));
 
 /**
  * Loads the Rapier WASM module; a failed attempt can be retried.
