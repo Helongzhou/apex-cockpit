@@ -1,6 +1,7 @@
 // physics-world.ts - Rapier physics world setup and shared physics helpers
 import RAPIER from '@dimforge/rapier3d-compat';
 import type { Object3D } from 'three';
+import { cacheOnce } from './loading.js';
 
 const GRAVITY = { x: 0, y: -150, z: 0 };
 const PHYSICS_TIMESTEP = 1 / 120;
@@ -16,16 +17,15 @@ export const COLLISION_GROUPS = {
     Environment: (MEMBERSHIP.Environment << 16) | ALL_GROUPS
 };
 
-let engineReady: Promise<void> | null = null;
+// Cached once, but a rejection clears the cache so a transient failure can be retried
+// (the previous version cached the rejected promise for the page's whole lifetime).
+const initEngine = cacheOnce(() => RAPIER.init());
 
 /**
- * Loads the Rapier WASM module once
+ * Loads the Rapier WASM module; a failed attempt can be retried.
  */
 export function initPhysicsEngine(): Promise<void> {
-    if (!engineReady) {
-        engineReady = RAPIER.init();
-    }
-    return engineReady;
+    return initEngine();
 }
 
 /**

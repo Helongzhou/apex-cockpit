@@ -9,6 +9,7 @@ import { DesktopControls } from './DesktopControls';
 import { FpsBadge } from './FpsBadge';
 import { InfoPanel } from './InfoPanel';
 import { MobileControls } from './MobileControls';
+import { RuntimeOverlay } from './RuntimeOverlay';
 
 export interface AppProps {
     store: Store<GameHost>;
@@ -41,6 +42,7 @@ export function App({ store, host, options }: AppProps) {
             <canvas id="renderCanvas" />
             <DesktopControls isTouchDevice={isTouchDevice} />
             <MobileControls host={host} isTouchDevice={isTouchDevice} />
+            <RuntimeOverlay store={store} />
         </>
     );
 }

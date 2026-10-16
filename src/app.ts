@@ -6,7 +6,7 @@
  * values and the reset order mirror `vue-app.js` exactly.
  */
 
-import { resetGame, toggleView } from '../game/three-game.js';
+import { recoverGame, resetGame, toggleView } from '../game/three-game.js';
 import type { GameHost } from '../game/types.js';
 import { createStore, type Store } from './state';
 
@@ -31,8 +31,10 @@ export function createInitialGameState(): GameHost {
         isTouchDevice: false,
         touchControls: { forward: false, backward: false, left: false, right: false, brake: false, jump: false },
         boxesStatus: emptyBoxes(),
+        runtime: { phase: 'loading', message: '', detail: '' },
         resetGame: () => undefined,
         toggleView: () => undefined,
+        retry: () => undefined,
     };
 }
 
@@ -69,6 +71,10 @@ export function createGameHost(): GameHostRef {
     };
     host.toggleView = () => {
         toggleView();
+    };
+    host.retry = () => {
+        // recoverGame() contains its own failures; no rejection escapes here.
+        void recoverGame(host);
     };
 
     return { store, host };

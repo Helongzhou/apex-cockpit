@@ -27,6 +27,16 @@ export interface Vec3 {
     z: number;
 }
 
+export type RuntimePhase = 'loading' | 'ready' | 'fatal' | 'context-lost';
+
+export interface RuntimeState {
+    phase: RuntimePhase;
+    /** Short user-facing message; empty while healthy. */
+    message: string;
+    /** Technical first line, shown for diagnosis. */
+    detail: string;
+}
+
 export interface GameHost {
     /** Written by `FpsMeter` every 500 ms. */
     fps: number;
@@ -51,4 +61,8 @@ export interface GameHost {
     resetGame(): void;
     /** Toggles between the follow camera and the cockpit view. */
     toggleView(): void;
+    /** Health of the render loop and of asset loading, shown by the runtime overlay. */
+    runtime: RuntimeState;
+    /** Rebuilds the session after a fatal error or a lost WebGL context. */
+    retry(): void;
 }

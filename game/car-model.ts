@@ -6,6 +6,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 // The bundler emits the model and hands back its final URL; a plain relative string
 // would not be copied into dist/.
 import CAR_MODEL_URL from './models/car.glb?url';
+import { cacheOnce } from './loading.js';
 
 // Half-track the physics rig is tuned for; the model is scaled uniformly so its wheels span it.
 // Matching the track (not the wheelbase) keeps the original roll-over resistance.
@@ -90,16 +91,16 @@ export interface CarModelData {
     glassGeometry: THREE.BufferGeometry | null;
 }
 
-let modelPromise: Promise<CarModelData> | null = null;
+// Cached once, but a rejection clears the cache so a transient failure can be retried
+// (the previous version cached the rejected promise for the page's whole lifetime).
+const loadOnce = cacheOnce(loadAndPrepare);
 
 /**
- * Loads and prepares the car model exactly once, later calls reuse the cached parts.
+ * Loads and prepares the car model; later calls reuse the cached parts, a failed attempt
+ * can be retried.
  */
 export function loadCarModel(): Promise<CarModelData> {
-    if (!modelPromise) {
-        modelPromise = loadAndPrepare();
-    }
-    return modelPromise;
+    return loadOnce();
 }
 
 async function loadAndPrepare(): Promise<CarModelData> {

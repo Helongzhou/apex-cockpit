@@ -231,6 +231,25 @@ function collectNonGlowingMeshes(scene: THREE.Scene): THREE.Mesh[] {
     return meshes;
 }
 
+/**
+ * The probe is shared across sessions, exactly like the renderer and the composer.
+ *
+ * Creating one cube render target per session leaked one texture per reset: the target was
+ * recreated on every session while the old GPU object was not always released. Reusing a
+ * single 128² target for the app's lifetime removes the churn entirely.
+ */
+let sharedProbe: ReflectionProbe | null = null;
+
+export function sharedReflectionProbe(): ReflectionProbe {
+    sharedProbe ??= new ReflectionProbe();
+    return sharedProbe;
+}
+
+export function disposeSharedReflectionProbe(): void {
+    sharedProbe?.dispose();
+    sharedProbe = null;
+}
+
 function createHdrTarget(size: THREE.Vector2, samples: number): THREE.WebGLRenderTarget {
     return new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples });
 }

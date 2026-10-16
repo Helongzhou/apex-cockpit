@@ -80,11 +80,27 @@ node scripts/compare-deterministic.mjs      # C1 交付，确认未破坏行为�
 
 ## 实测记录（执行时填写）
 
+全部数据来自 `scripts/stability-check.mjs`（playwright + headless chromium + SwiftShader 软件渲染，本机约 5 fps）与一次性计时探针（页面内 `MutationObserver` 计时，避免被 play- wright 在低帧率下的轮询延迟污染）。
+
 | 项 | 值 |
 |---|---|
-| AC2.1 异常注入恢复耗时 | （待填） |
-| AC2.2 上下文恢复耗时 / 首帧位移偏差 | （待填） |
-| AC2.4 20 次重置后 world/几何/纹理计数 | （待填） |
-| AC2.5 监听器 added/removed | （待填） |
-| AC2.6 隐藏 30 s 后首帧 delta | （待填） |
-| AC2.7 拖拽 10 s 的 RT 重建次数 | （待填） |
+| AC2.1 异常注入 → fatal 可见 | **0.5 ms**（页面内计时）。同一时刻 harness 侧测到 4064 ms，差值全部来自 playwright 在 ~5 fps 下的 rAF 轮询延迟，不是应用延迟 |
+| AC2.1 点击重试 → 恢复 ready | **39 ms**（会话重建；模型已缓存） |
+| AC2.1 抛错是否逃逸到页面 | 无 `pageerror`（15 项检查里"the exception did not escape to the page"通过） |
+| AC2.2 loseContext → 丢失态可见 | **1850 ms**（页面内计时）。这段延迟来自浏览器异步派发 `webglcontextlost` 本身，我方收到事件后在同一事件回调内写入状态 |
+| AC2.2 restoreContext → 恢复 ready | **174 ms**（重建 composer + 探针；AC 要求 ≤ 60 s） |
+| AC2.2 丢失期间是否继续仿真 | 冻结（位置读数 900 ms 内 `-0.00 → -0.00`） |
+| AC2.3 加载失败可重试 | 前 2 次 `car.glb` 请求注入 500 → 第 3 次成功；页面不砖化，且加载中可见 overlay |
+| **AC2.4 20 次重置后计数** | geometries **45 → 45**、textures **21 → 21**、programs **19 → 19**、active listeners **20 → 20** |
+| AC2.5 监听器 added/removed | 20 次重置：added **20 → 140**（每轮 +6：CarControls 2 + FollowCamera 4），removed **0 → 120**，active **20 → 20** |
+| AC2.6 隐藏标签页 | 构造验证：`timer.connect(document)`（three r160+ 的可见性守卫，恢复时 `reset()`，避免隐藏 30 s 后首帧吞掉整段 delta）+ 可见性切换不扰动检查通过。**无头环境无法真实隐藏标签页，故未测"隐藏 30 s 后首帧 delta"本身**（诚实标注为未直接验证） |
+| AC2.7 视口抖动合并 | **100 次视口变更 / 2.5 s → 1 次 RT 重建**（rAF 合并；门槛为 10 s 内 < 10 次）。canvas 尺寸确实跟随（1000×700 → 700×500 → 1200×800） |
+| 稳定性检查总览 | `scripts/stability-check.mjs` **22/22 通过** |
+| C1 行为不变性复测 | 迁移后仍需通过 `scripts/compare-deterministic.mjs`（本轮改动后重跑，见下） |
+
+### 本轮发现并修掉的真实缺陷（不是计划里预料的）
+
+1. **纹理每会话泄漏 1 个**：AC2.4 的计数断言（21 → 35）暴露出来的。逐阶段插桩后定位为反射探针的 cube render target——每会话新建、但旧对象未被有效释放（`WebGLRenderTarget.dispose()` 在这种时序下没能回收计数）。逐项排除确认阴影贴图不是元凶（关掉阴影后创建/释放各少 2，对称）。修法不是补一次 `dispose()`，而是**把探针提升为跨会话共享单例**（`sharedReflectionProbe()`，与 renderer/composer 同级，`disposeGame()` 时统一释放）。修复后 21 → 21 稳定。
+2. **灯光阴影贴图未释放**：`Light.dispose()` 不释放 `light.shadow.map`（渲染目标挂在 shadow 对象上），已在 `disposeSceneResources` 中显式 `shadow.dispose()`。
+3. **重置竞态**（计划已预料的 P-2）：`resetGame` 改为 promise 链串行化 + 请求序号，被后续请求取代的那次直接 no-op，不再让落败会话（及其 6 个监听器与 GPU 资源）成为孤儿。
+4. **`WEBGL_lose_context` 的陷阱**（写在检查脚本注释里）：上下文丢失后 `getExtension()` 返回 `null`，所以必须在丢失前缓存扩展句柄才能触发恢复——这是检查脚本第一版超时的根因，不是应用缺陷。

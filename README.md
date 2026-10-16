@@ -205,7 +205,7 @@ timer.update()
 |---|---|---|
 | 1 | **渲染循环无错误边界**：任一异常抛在 `renderFrame` 内，three 的 `WebGLAnimation` 不会再排下一帧 → **画面永久冻结**，只有一条 console 错误 | `three-game.js:85-91` |
 | 2 | **加载失败被永久缓存**：模块级 Promise 把 reject 也缓存，一次 CDN 抖动后每次重置都立即失败，**无重试路径** | `physics-world.js:24-28`、`car-model.js:41-46` |
-| 3 | **WebGL 上下文丢失零处理**：全库 grep `webglcontextlost` 零命中 —— 车机上"闪退 / 黑屏"的典型成因 | 全库 |
+| 3 | **WebGL 上下文丢失只有底层处理、没有应用层恢复**：three 的 `WebGLRenderer` 自己注册了两个上下文事件（丢帧时 `preventDefault()`，恢复时 `initGLContext()` + 重建内置状态，见 §研究文档），但**应用层没有任何配合** —— composer / 反射探针的 render target 仍绑在旧上下文上，渲染循环也不会停，物理时钟还会继续积分 | 全库（应用层） |
 | 4 | **重置无重入保护**：连按 `Enter` 会让两个异步流程交错，落败的会话（含 Rapier world）永不释放 | `three-game.js:44-57` |
 | 5 | **触摸无 `touchcancel`**：系统手势打断后 `touchend` 不触发 → 刹车 / 跳跃**永久卡在按下状态**，跳跃的 50 ms 定时器也不会被清 | `mobile-controls.js:120-122,150-171` |
 | 6 | **HUD 单位错误**：物理速度被直接标成 `km/h`；`UNITS_PER_METER = 8` 定义了却从未参与换算 | `info-panel.js:16,72`、`physics-world.js:8` |
@@ -258,7 +258,7 @@ timer.update()
 | 总包 gzip | ≈ 1.52 MB | ≤ 0.9 MB |
 | draw call / 帧 | ≈ 120–150（推算） | ≤ 80 |
 | 场景遍历 / 帧 | 3 次 | ≤ 3 次（阴影节流 + 探针空闲暂停） |
-| WebGL 上下文丢失 | 无处理 | ≤ 60 s 内自动恢复 |
+| WebGL 上下文丢失 | 底层由 three 处理，应用层无配合 | 应用层暂停仿真 + 重建 render target + 可见状态，恢复后自动续跑 |
 | 运行期异常 | 永久冻屏 | 兜底 + 一键恢复 |
 | 帧率（CPU 4× 节流） | 未测 | ≥ 30 fps（车机代理基线） |
 

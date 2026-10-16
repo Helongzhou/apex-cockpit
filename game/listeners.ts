@@ -29,9 +29,27 @@ let addedCount = 0;
 let removedCount = 0;
 
 /**
+ * Canvas context events (`webglcontextlost` / `webglcontextrestored`) are not part of
+ * `HTMLElementEventMap`, so this overload types them explicitly.
+ */
+export function listen(
+    target: HTMLCanvasElement,
+    type: 'webglcontextlost' | 'webglcontextrestored',
+    handler: (event: Event) => void,
+    options?: AddEventListenerOptions | boolean
+): ListenerHandle;
+
+/**
  * Registers a listener and returns a handle that removes it exactly once.
  * The handler is typed from the target's event map, so call sites stay precise.
  */
+export function listen<T extends ListenerTarget, K extends keyof EventMapOf<T> & string>(
+    target: T,
+    type: K,
+    handler: (event: EventMapOf<T>[K]) => void,
+    options?: AddEventListenerOptions | boolean
+): ListenerHandle;
+
 export function listen<T extends ListenerTarget, K extends keyof EventMapOf<T> & string>(
     target: T,
     type: K,

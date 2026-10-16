@@ -21,6 +21,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "smoke": "node scripts/ui-smoke.mjs dist",
+    "stability": "node scripts/stability-check.mjs dist",
     "deterministic": "node scripts/compare-deterministic.mjs",
     "serve": "python3 -m http.server 8080"
   },
