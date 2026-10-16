@@ -286,7 +286,23 @@ timer.update()
 
 ## 十、开发约定
 
-本仓库使用 **Trellis** 管理工作流：`.trellis/workflow.md`（计划 / 执行 / 收尾三段）、`.trellis/spec/`（分层编码规范）、`.trellis/tasks/`（任务）、`.trellis/workspace/`（开发日志）。规范中前端层目前仍是待填模板，会在迭代 1 按真实代码回填。
+本仓库使用 **Trellis** 管理工作流：`.trellis/workflow.md`（计划 / 执行 / 收尾三段）、`.trellis/spec/`（分层编码规范）、`.trellis/tasks/`（任务）、`.trellis/workspace/`（开发日志）。前端层规范已按真实代码回填（6 份，见 `.trellis/spec/frontend/`）。
+
+### 如何跑测试与验证
+
+```bash
+npm run typecheck     # strict TypeScript，0 错误
+npm run test          # vitest 单测（45 个用例，纯函数与 store）
+npm run test:coverage # 覆盖率（当前 93.3% 语句 / 87.2% 分支）
+npm run build         # 产出静态 dist/（无 CDN 引用）
+npm run smoke         # 15 项 UI 行为检查（playwright + 无头 Chromium）
+npm run stability     # 22 项故障注入：异常边界 / 上下文丢失 / 加载重试 / 20 次重置
+npm run deterministic -- --dump --dir dist --out /tmp/c.json       # 采样 601 帧物理状态
+npm run deterministic -- --compare <baseline.json> /tmp/c.json     # 与基线逐帧比对（期望 0 差异）
+node scripts/measure-budget.mjs dist                                # 包体 + draw call + FPS 实测
+```
+
+浏览器二进制默认取仓库内 `.playwright-browsers/`（已 gitignore），可用 `PLAYWRIGHT_BROWSERS_PATH` 覆盖。
 
 文档索引：
 
