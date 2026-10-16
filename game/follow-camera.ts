@@ -2,6 +2,7 @@
 import * as THREE from 'three';
 import { listen, releaseAll, type ListenerHandle } from './listeners.js';
 import { clampStep, smoothingFactor } from './math/frame-rate.js';
+import { ADAS_LAYER } from './adas/layers.js';
 
 const FIELD_OF_VIEW_DEGREES = 45.8; // Babylon.js default camera fov (0.8 rad)
 const COCKPIT_FIELD_OF_VIEW_DEGREES = 74; // wide driver-POV: full windshield above, wheel + footwell below
@@ -42,6 +43,8 @@ export class FollowCamera {
         this.camera = new THREE.PerspectiveCamera(
             FIELD_OF_VIEW_DEGREES, window.innerWidth / window.innerHeight, NEAR_PLANE, FAR_PLANE
         );
+        // The ADAS overlays live on their own layer; the main camera must opt in.
+        this.camera.layers.enable(ADAS_LAYER);
         this.camera.position.copy(INITIAL_POSITION);
         this.rotationOffset = FOLLOW.rotationOffset;
         this.lockedTarget = null;

@@ -1,5 +1,6 @@
 // rendering.ts - WebGL renderer, selective glow post-processing and the car reflection probe
 import * as THREE from 'three';
+import { isAdas } from './adas/layers.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
@@ -242,7 +243,8 @@ function collectNonGlowingMeshes(scene: THREE.Scene): THREE.Mesh[] {
     const meshes: THREE.Mesh[] = [];
     scene.traverse(object => {
         const mesh = object as THREE.Mesh;
-        if (mesh.isMesh && !mesh.layers.isEnabled(GLOW_LAYER)) {
+        // ADAS overlays live on their own layer and must not be dimmed by the bloom pass.
+        if (mesh.isMesh && !mesh.layers.isEnabled(GLOW_LAYER) && !isAdas(mesh)) {
             meshes.push(mesh);
         }
     });

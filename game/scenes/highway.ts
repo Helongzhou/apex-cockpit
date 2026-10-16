@@ -13,6 +13,7 @@ import { RAPIER, COLLISION_GROUPS, syncMeshWithBody } from '../physics-world.js'
 import { babylonColor } from '../color.js';
 import { GROUND_LEVEL, type Environment, type KnockableBox } from '../world.js';
 import { ROAD_LENGTH, createHighwayPath, type HighwayPath } from '../math/highway-path.js';
+import type { AdasTarget } from '../adas/targets.js';
 
 const GROUND_THICKNESS = 2;
 /** Total drivable length along +Z; the car spawns near the middle. */
@@ -219,9 +220,39 @@ export function createHighwayEnvironment(scene: THREE.Scene, world: RAPIER.World
     placeLead();
 
     const boxes: KnockableBox[] = [];
+    // Ground truth for the ADAS layers: today the kinematic lead vehicle. The array and the
+    // object inside it are reused every frame so the target feed allocates nothing.
+    const adasTargets: AdasTarget[] = [{
+        id: 'lead-vehicle',
+        position: { x: 0, y: GROUND_LEVEL + 6, z: 0 },
+        velocity: { x: 0, y: 0, z: LEAD_VEHICLE.speed },
+        heading: 0,
+        length: 55,
+        width: 26,
+        height: 24,
+        kind: 'car',
+        confidence: 1,
+        source: 'truth'
+    }];
 
     return {
         boxes,
+        adas: {
+            path,
+            laneCount: 3,
+            laneWidth: LANE_WIDTH,
+            targets(): readonly AdasTarget[] {
+                const centre = path.pointAt(leadDistance);
+                const heading = path.headingAt(leadDistance);
+                const target = adasTargets[0];
+                target.position.x = centre.x;
+                target.position.z = centre.z;
+                target.heading = heading;
+                target.velocity.x = Math.sin(heading) * LEAD_VEHICLE.speed;
+                target.velocity.z = Math.cos(heading) * LEAD_VEHICLE.speed;
+                return adasTargets;
+            }
+        },
         path,
         syncMeshes(): void {
             syncMeshWithBody(leadMesh, leadBody);

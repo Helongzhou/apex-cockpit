@@ -43,6 +43,8 @@ export function createInitialGameState(): GameHost {
             steerAngleDeg: 0,
             collision: false
         },
+        adasMode: 'off',
+        adasAvailable: false,
         stage: 'studio',
         stages: [],
         setStage: () => undefined,

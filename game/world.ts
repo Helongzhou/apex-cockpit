@@ -96,6 +96,14 @@ export interface Environment {
      * studio does not implement it, so its behaviour is untouched.
      */
     update?(deltaSeconds: number): void;
+    /** Optional ADAS consumer hook: stages that can be visualised report their targets here. */
+    adas?: {
+        path: import('./math/highway-path.js').HighwayPath;
+        laneCount: number;
+        laneWidth: number;
+        /** Ground-truth targets for this frame; reused between calls (no per-frame allocation). */
+        targets(): readonly import('./adas/targets.js').AdasTarget[];
+    };
 }
 
 /**

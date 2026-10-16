@@ -1,0 +1,46 @@
+/* adas.css - ADAS overlay controls (task E1). The overlays themselves are 3D geometry. */
+
+.adas-toggle {
+    position: fixed;
+    right: 18px;
+    top: 62px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px 6px 12px;
+    border-radius: 10px;
+    background: rgba(18, 18, 22, 0.86);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    z-index: 1000;
+}
+
+.adas-toggle-title {
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    color: #67e8f9;
+    margin-right: 2px;
+}
+
+.adas-button {
+    padding: 5px 12px;
+    border-radius: 7px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: transparent;
+    color: #d1d5db;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.adas-button.active {
+    background: #0891b2;
+    border-color: #0891b2;
+    color: #ffffff;
+}
+
+@media (max-width: 720px) {
+    .adas-toggle {
+        top: auto;
+        bottom: 220px;
+        right: 12px;
+    }
+}

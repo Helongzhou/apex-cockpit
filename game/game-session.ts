@@ -8,6 +8,7 @@ import { FollowCamera } from './follow-camera.js';
 import { createCar, type Car } from './car.js';
 import type { Environment } from './world.js';
 import { DEFAULT_STAGE, stageDefinition } from './scenes/index.js';
+import { AdasVisualisation, type AdasMode, type AdasStats } from './adas/manager.js';
 import { CarControls } from './controls.js';
 import { Telemetry } from './telemetry.js';
 import { createStateBus, type StateBus } from './state-bus.js';
@@ -17,6 +18,8 @@ import type { GameEvent, GameHost, StageId } from './types.js';
 const BACKGROUND_COLOR = [0.95, 0.95, 0.95] as const;
 // Babylon.js direction (1, 1, 0) with the X axis mirrored for the right-handed world
 const HEMISPHERIC_LIGHT = { direction: [-1, 1, 0] as const, intensity: 0.7 };
+/** Pool size for the ADAS target markers (the iteration plan budgets 60 targets). */
+const ADAS_TARGET_CAPACITY = 60;
 
 export interface GameSessionOptions {
     canvas: HTMLCanvasElement;
@@ -41,6 +44,10 @@ export class GameSession {
     reflectionProbe: ReflectionProbe;
     /** Single source of truth for the physical state; the HUD and the ADAS layers consume it. */
     bus: StateBus<VehicleState, GameEvent>;
+    /** ADAS overlays; null on stages that do not publish targets (the studio). */
+    adas: AdasVisualisation | null;
+    host: GameHost;
+    private appliedAdasMode: AdasMode = 'off';
     /** While paused, `update()` does nothing: used while the WebGL context is lost. */
     paused: boolean;
 
@@ -79,6 +86,18 @@ export class GameSession {
         this.reflectionProbe = sharedReflectionProbe();
         this.reflectionProbe.attachToMesh(car.mesh);
         this.paused = false;
+        this.host = host;
+
+        // Only stages that publish an ADAS feed get overlays built at all.
+        const adas = environment.adas;
+        this.adas = adas === undefined
+            ? null
+            : new AdasVisualisation(scene, {
+                path: adas.path,
+                laneCount: adas.laneCount,
+                laneWidth: adas.laneWidth,
+                targetCapacity: ADAS_TARGET_CAPACITY
+            });
     }
 
     get camera(): THREE.Camera {
@@ -107,6 +126,7 @@ export class GameSession {
         this.car.syncMeshes();
         this.environment.syncMeshes();
         this.followCamera.update(deltaSeconds);
+        this.updateAdas();
         this.publishVehicleState(deltaSeconds);
         this.reflectionProbe.update(this.renderer, this.scene);
     }
@@ -128,6 +148,26 @@ export class GameSession {
         // `justCollided` comes from the previous snapshot's detection: collisions are reported as
         // events, and the flag lets the next state carry the same fact for one frame.
         this.bus.publish(deriveVehicleState(this.bus.getState(), sample, deltaSeconds, this.telemetry.justCollided));
+    }
+
+    /** Applies the UI's ADAS mode and refreshes the overlays from the stage's ground truth. */
+    updateAdas(): void {
+        if (this.adas === null) {
+            return;
+        }
+        if (this.host.adasMode !== this.appliedAdasMode) {
+            this.adas.setMode(this.host.adasMode);
+            this.appliedAdasMode = this.host.adasMode;
+        }
+        const position = this.car.position;
+        this.adas.update(
+            { position: { x: position.x, y: position.y, z: position.z }, heading: this.car.yaw() },
+            this.environment.adas?.targets() ?? []
+        );
+    }
+
+    adasStats(): AdasStats | null {
+        return this.adas?.stats() ?? null;
     }
 
     pause(): void {
@@ -156,6 +196,7 @@ export class GameSession {
     }
 
     dispose(): void {
+        this.adas?.dispose();
         this.telemetry.dispose();
         this.controls.dispose();
         this.followCamera.dispose();

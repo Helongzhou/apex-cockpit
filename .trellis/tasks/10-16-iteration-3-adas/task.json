@@ -1,0 +1,30 @@
+{
+  "id": "iteration-3-adas",
+  "name": "iteration-3-adas",
+  "title": "Iteration 3: ADAS visualisation, perception noise and performance tooling",
+  "description": "Iteration 3 parent: add the ADAS visualisation layers (lanes, target boxes), the truth-vs-perception narrative, a performance monitor with an on-screen panel, and finish the delivery work (docs, demo assets, deployment). Per the iteration plan the cut order is trajectory prediction first, then the delivery extras.",
+  "status": "planning",
+  "dev_type": null,
+  "scope": null,
+  "package": null,
+  "priority": "P0",
+  "creator": "HelongZhou",
+  "assignee": "HelongZhou",
+  "createdAt": "2026-10-16",
+  "completedAt": null,
+  "branch": null,
+  "base_branch": "main",
+  "worktree_path": null,
+  "commit": null,
+  "pr_url": null,
+  "subtasks": [],
+  "children": [
+    "10-16-adas-layers",
+    "10-16-perception-noise",
+    "10-16-perf-monitor"
+  ],
+  "parent": null,
+  "relatedFiles": [],
+  "notes": "",
+  "meta": {}
+}

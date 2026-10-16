@@ -72,6 +72,8 @@ declare global {
             calls: number; triangles: number; stage: string;
             /** Application-side stage-switch cost (session rebuild), excluding the first frame. */
             lastSwitchMs: number;
+            /** ADAS overlay counters, null on stages without an ADAS feed. */
+            adas: { lanes: number; targets: number; capacity: number; laneErrorMeters: number; laneIndex: number; visible: boolean; mode: string; layer: number; layerIsolated: boolean } | null;
         };
     }
 }
@@ -126,7 +128,8 @@ export function initializeGame(host: GameHost, options: GameOptions = {}): void 
         calls: renderer.info.render.calls,
         triangles: renderer.info.render.triangles,
         stage: currentStage,
-        lastSwitchMs
+        lastSwitchMs,
+        adas: session?.adasStats() ?? null
     });
 
     startGame(host).catch(error => {
@@ -290,6 +293,9 @@ async function startSession(host: GameHost): Promise<void> {
         }
     });
     glowComposer.setScene(session.scene, session.camera);
+    // Only stages that publish ADAS targets show the toggle.
+    host.adasAvailable = session.adasStats() !== null;
+    host.adasMode = 'off';
     timer.update(); // discard the loading time so the first frame does not jump ahead
 }
 

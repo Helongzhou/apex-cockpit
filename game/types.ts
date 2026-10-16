@@ -69,6 +69,9 @@ export interface VehicleSnapshot {
 
 export type StageId = 'studio' | 'highway';
 
+/** ADAS overlay mode owned by the UI, read by the game layer. */
+export type { AdasMode } from './adas/manager.js';
+
 export interface GameHost {
     /** Written by `FpsMeter` every 500 ms. */
     fps: number;
@@ -86,6 +89,10 @@ export interface GameHost {
     isRacing: boolean;
     /** Cluster snapshot, written field by field from the bus at the HUD rate. */
     vehicle: VehicleSnapshot;
+    /** ADAS overlay mode; the toggle writes it and the game layer reads it every frame. */
+    adasMode: import('./adas/manager.js').AdasMode;
+    /** True when the running stage publishes an ADAS feed; written by the game. */
+    adasAvailable: boolean;
     /** Active stage; the switcher writes it through `setStage`. */
     stage: StageId;
     /** Stages the running build provides; written by the game so the UI never hardcodes them. */
