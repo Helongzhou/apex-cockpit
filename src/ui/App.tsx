@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 
-import { initializeGame, type GameOptions } from '../../game/three-game.js';
+import { initializeGame, disposeGame, type GameOptions } from '../../game/three-game.js';
 import type { GameHost } from '../../game/types.js';
 import type { Store } from '../state';
 import { useGameState } from '../hooks/useGameState';
@@ -27,6 +27,9 @@ export function App({ store, host, options }: AppProps) {
 
     useEffect(() => {
         initializeGame(host, options);
+        return () => {
+            disposeGame();
+        };
         // Initialised once: the game owns a module-level render loop and a singleton renderer.
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);

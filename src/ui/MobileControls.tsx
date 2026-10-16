@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { GameHost } from '../../game/types.js';
+import { listen, releaseAll } from '../../game/listeners.js';
 
 const JOYSTICK_DEADZONE_PX = 15;
 const JOYSTICK_MAX_DISTANCE_PX = 35; // half of joystick outer radius minus inner radius
@@ -80,21 +81,19 @@ export function MobileControls({ host, isTouchDevice }: { host: GameHost; isTouc
             host.touchControls.right = false;
         };
 
-        const controller = new AbortController();
-        const { signal } = controller;
-
-        // Touch events
-        joystick.addEventListener('touchstart', handleStart, { passive: false, signal });
-        document.addEventListener('touchmove', handleMove, { passive: false, signal });
-        document.addEventListener('touchend', handleEnd, { passive: false, signal });
-
-        // Mouse events for testing on desktop
-        joystick.addEventListener('mousedown', handleStart, { signal });
-        document.addEventListener('mousemove', handleMove, { signal });
-        document.addEventListener('mouseup', handleEnd, { signal });
+        const handles = [
+            // Touch events
+            listen(joystick, 'touchstart', handleStart, { passive: false }),
+            listen(document, 'touchmove', handleMove, { passive: false }),
+            listen(document, 'touchend', handleEnd, { passive: false }),
+            // Mouse events for testing on desktop
+            listen(joystick, 'mousedown', handleStart),
+            listen(document, 'mousemove', handleMove),
+            listen(document, 'mouseup', handleEnd)
+        ];
 
         return () => {
-            controller.abort();
+            releaseAll(handles);
         };
     }, [host]);
 

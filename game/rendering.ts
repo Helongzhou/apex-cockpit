@@ -43,13 +43,21 @@ const MIX_FRAGMENT_SHADER = `
 type MeshMaterial = THREE.Material | THREE.Material[];
 
 /**
+ * Re-applies the capped device pixel ratio. Called on resize and when the DPR changes
+ * (e.g. a window moved to another display).
+ */
+export function applyPixelRatio(renderer: THREE.WebGLRenderer): void {
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));
+}
+
+/**
  * @param canvas
  */
 export function createRenderer(canvas: HTMLCanvasElement): THREE.WebGLRenderer {
     // No multisampled canvas: the image arrives through the composer and FXAA smooths it, so a
     // multisampled default framebuffer would only be resolved for nothing on every frame
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, MAX_PIXEL_RATIO));
+    applyPixelRatio(renderer);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFShadowMap;

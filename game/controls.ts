@@ -1,6 +1,7 @@
 // controls.ts - Keyboard and touch input mapped onto the car's motors every frame
 import type { Car } from './car.js';
 import type { GameHost, TouchControls } from './types.js';
+import { listen, releaseAll, type ListenerHandle } from './listeners.js';
 
 const MAX_SPEED = 80;
 const REVERSE_SPEED_LIMIT = MAX_SPEED * 0.5;
@@ -50,6 +51,7 @@ export class CarControls {
     visualState: CarVisualState;
     onKeyDown: (event: KeyboardEvent) => void;
     onKeyUp: (event: KeyboardEvent) => void;
+    handles: ListenerHandle[];
 
     constructor(car: Car, host: GameHost) {
         this.car = car;
@@ -62,13 +64,15 @@ export class CarControls {
 
         this.onKeyDown = (event) => this.handleKey(event, true);
         this.onKeyUp = (event) => this.handleKey(event, false);
-        window.addEventListener('keydown', this.onKeyDown);
-        window.addEventListener('keyup', this.onKeyUp);
+        this.handles = [
+            listen(window, 'keydown', this.onKeyDown),
+            listen(window, 'keyup', this.onKeyUp)
+        ];
     }
 
     dispose(): void {
-        window.removeEventListener('keydown', this.onKeyDown);
-        window.removeEventListener('keyup', this.onKeyUp);
+        releaseAll(this.handles);
+        this.handles = [];
     }
 
     handleKey(event: KeyboardEvent, isDown: boolean): void {

@@ -1,7 +1,8 @@
 // three-game.ts - Three.js + Rapier game entry points used by the React app
 import * as THREE from 'three';
 import { initPhysicsEngine } from './physics-world.js';
-import { createRenderer, requestShadowUpdate, GlowComposer } from './rendering.js';
+import { applyPixelRatio, createRenderer, requestShadowUpdate, GlowComposer } from './rendering.js';
+import { listen, releaseAll, type ListenerHandle } from './listeners.js';
 import { GameSession } from './game-session.js';
 import { FpsMeter } from './fps-meter.js';
 import type { GameHost } from './types.js';
@@ -31,6 +32,15 @@ let gameOptions: GameOptions = {};
 let frameIndex = 0;
 const timer = new THREE.Timer();
 
+// Viewport handling: resize events are coalesced into one update per frame because
+// `EffectComposer.setSize()` rebuilds framebuffers.
+let resizeObserver: ResizeObserver | undefined;
+let resizeHandle: ListenerHandle | undefined;
+let dprHandle: ListenerHandle | undefined;
+let resizeFrame: number | null = null;
+let pendingResize: { width: number; height: number } | null = null;
+const canvasHandles: ListenerHandle[] = [];
+
 /**
  * Initialize renderer, physics engine and the first game session
  * @param host - the UI-side state host the game writes into
@@ -50,7 +60,7 @@ export function initializeGame(host: GameHost, options: GameOptions = {}): void 
         .then(() => startSession(host))
         .then(() => {
             renderer.setAnimationLoop(renderFrame);
-            window.addEventListener('resize', handleResize);
+            watchViewport();
             setupCanvasFocus();
             console.log('🎮 Three.js scene created and render loop started');
         })
@@ -110,16 +120,75 @@ function renderFrame(): void {
     gameOptions.onFrame?.(frameIndex, session);
 }
 
-function handleResize(): void {
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    glowComposer.setSize(window.innerWidth, window.innerHeight);
-    session?.resize(window.innerWidth / window.innerHeight);
+/** Coalesces viewport changes so framebuffers are rebuilt at most once per frame. */
+function requestResize(): void {
+    pendingResize = { width: window.innerWidth, height: window.innerHeight };
+    if (resizeFrame !== null) {
+        return;
+    }
+    resizeFrame = requestAnimationFrame(applyPendingResize);
+}
+
+function applyPendingResize(): void {
+    resizeFrame = null;
+    const size = pendingResize;
+    pendingResize = null;
+    if (size === null) {
+        return;
+    }
+    renderer.setSize(size.width, size.height);
+    applyPixelRatio(renderer);
+    glowComposer.setSize(size.width, size.height);
+    session?.resize(size.width / size.height);
+}
+
+function watchViewport(): void {
+    if (typeof ResizeObserver !== 'undefined') {
+        resizeObserver = new ResizeObserver(requestResize);
+        resizeObserver.observe(document.documentElement);
+    } else {
+        resizeHandle = listen(window, 'resize', requestResize);
+    }
+    watchPixelRatio();
+}
+
+/** Reacts to a device-pixel-ratio change (e.g. a window dragged to another display). */
+function watchPixelRatio(): void {
+    dprHandle?.release();
+    const query = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+    dprHandle = listen(query, 'change', () => {
+        requestResize();
+        watchPixelRatio();
+    });
 }
 
 function setupCanvasFocus(): void {
     setTimeout(() => {
         canvas.setAttribute('tabindex', '0');
         canvas.focus();
-        canvas.addEventListener('click', () => canvas.focus());
+        canvasHandles.push(listen(canvas, 'click', () => canvas.focus()));
     }, CANVAS_FOCUS_DELAY_MS);
+}
+
+/**
+ * Tears the game down and releases every listener it registered. Called from the React
+ * effect cleanup; also keeps `window.__listenerCount()` meaningful across remounts.
+ */
+export function disposeGame(): void {
+    renderer?.setAnimationLoop(null);
+    session?.dispose();
+    session = null;
+
+    resizeObserver?.disconnect();
+    resizeObserver = undefined;
+    releaseAll([resizeHandle, dprHandle, ...canvasHandles]);
+    canvasHandles.length = 0;
+    resizeHandle = undefined;
+    dprHandle = undefined;
+
+    if (resizeFrame !== null) {
+        cancelAnimationFrame(resizeFrame);
+        resizeFrame = null;
+    }
+    pendingResize = null;
 }

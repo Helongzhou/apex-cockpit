@@ -1,5 +1,6 @@
 // follow-camera.ts - Port of the Babylon.js FollowCamera including the mouse orbit control
 import * as THREE from 'three';
+import { listen, releaseAll, type ListenerHandle } from './listeners.js';
 
 const FIELD_OF_VIEW_DEGREES = 45.8; // Babylon.js default camera fov (0.8 rad)
 const COCKPIT_FIELD_OF_VIEW_DEGREES = 74; // wide driver-POV: full windshield above, wheel + footwell below
@@ -34,6 +35,7 @@ export class FollowCamera {
     onPointerUp: () => void;
     onPointerMove: (event: PointerEvent) => void;
     onKeyDown: (event: KeyboardEvent) => void;
+    handles: ListenerHandle[];
 
     constructor(canvas: HTMLCanvasElement) {
         this.camera = new THREE.PerspectiveCamera(
@@ -62,10 +64,12 @@ export class FollowCamera {
                 this.setCockpit(!this.cockpit);
             }
         };
-        canvas.addEventListener('pointerdown', this.onPointerDown);
-        window.addEventListener('pointerup', this.onPointerUp);
-        window.addEventListener('pointermove', this.onPointerMove);
-        window.addEventListener('keydown', this.onKeyDown);
+        this.handles = [
+            listen(canvas, 'pointerdown', this.onPointerDown),
+            listen(window, 'pointerup', this.onPointerUp),
+            listen(window, 'pointermove', this.onPointerMove),
+            listen(window, 'keydown', this.onKeyDown)
+        ];
     }
 
     lockTarget(object: THREE.Object3D): void {
@@ -137,10 +141,8 @@ export class FollowCamera {
     }
 
     dispose(): void {
-        this.canvas.removeEventListener('pointerdown', this.onPointerDown);
-        window.removeEventListener('pointerup', this.onPointerUp);
-        window.removeEventListener('pointermove', this.onPointerMove);
-        window.removeEventListener('keydown', this.onKeyDown);
+        releaseAll(this.handles);
+        this.handles = [];
     }
 }
 

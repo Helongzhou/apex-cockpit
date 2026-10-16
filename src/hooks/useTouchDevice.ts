@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import type { GameHost } from '../../game/types.js';
+import { listen, releaseAll } from '../../game/listeners.js';
 
 /**
  * Port of `vue-app.js` `detectTouchOnly()`: capability queries plus a runtime switch on the
@@ -36,12 +37,12 @@ export function useTouchDevice(host: GameHost): void {
             }
         };
 
-        const controller = new AbortController();
-        const { signal } = controller;
-        window.addEventListener('touchstart', handleTouch, { passive: true, signal });
-        window.addEventListener('touchmove', handleTouch, { passive: true, signal });
-        window.addEventListener('mousedown', handleMouse, { passive: true, signal });
-        window.addEventListener('mousemove', handleMouse, { passive: true, signal });
+        const handles = [
+            listen(window, 'touchstart', handleTouch, { passive: true }),
+            listen(window, 'touchmove', handleTouch, { passive: true }),
+            listen(window, 'mousedown', handleMouse, { passive: true }),
+            listen(window, 'mousemove', handleMouse, { passive: true })
+        ];
 
         // Fallback for very old browsers (optional)
         if (!('matchMedia' in window)) {
@@ -51,7 +52,7 @@ export function useTouchDevice(host: GameHost): void {
         return () => {
             mqCoarseNoHover.removeEventListener?.('change', updateTouchOnly);
             mqAnyHover.removeEventListener?.('change', updateTouchOnly);
-            controller.abort();
+            releaseAll(handles);
         };
     }, [host]);
 }

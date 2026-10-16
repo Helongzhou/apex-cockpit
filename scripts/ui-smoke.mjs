@@ -115,6 +115,21 @@ const check = (name, passed, detail = '') => {
     );
 
     check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
+
+    // AC2.5: resetting must not grow the active listener count.
+    const countListeners = () => page.evaluate(() => window.__listenerCount?.() ?? null);
+    const before = await countListeners();
+    for (let run = 0; run < 5; run += 1) {
+        await page.keyboard.press('Enter');
+        await page.waitForTimeout(900);
+    }
+    const after = await countListeners();
+    check(
+        'resets do not leak listeners',
+        before !== null && after !== null && after.active === before.active,
+        `active ${before?.active} -> ${after?.active} (added ${before?.added} -> ${after?.added})`
+    );
+
     await page.close();
 }
 
