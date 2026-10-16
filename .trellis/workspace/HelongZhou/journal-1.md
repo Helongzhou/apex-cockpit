@@ -185,3 +185,40 @@ Iteration 3 finished and the project is delivery-ready: ADAS layers with layer i
 
 - Enable GitHub Pages in the repository settings to serve the published branch
 - Optional follow-ups recorded in the task archives: instanced environment geometry to bring the studio draw-call count comfortably under 80, and a real-hardware frame-time measurement to settle the 0.5 ms budget that this environment cannot resolve
+
+
+## Session 5: Wrap up: publish channel, specs backfill and the final verification sweep
+<!-- trellis-session: v=2 fp=f7905e0c416d1505 -->
+
+**Date**: 2026-10-16
+**Task**: Wrap up: publish channel, specs backfill and the final verification sweep
+**Branch**: `main`
+
+### Summary
+
+Closing round for the three-iteration plan: documented the gh-pages publish channel and re-verified every gate with the working tree clean and no active tasks left
+
+### Main Changes
+
+- Documented how the static build is published (clean gh-pages branch containing only index.html/assets/.nojekyll, how to re-publish, and the offline/no-CDN self-check)
+- Specs already backfilled from the real code in this round (10 components, transform-only instrument rule, low-frequency snapshot rule, listener registry rule) and every React listener routed through game/listeners.ts
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `c454448` | Document the publish channel |
+
+### Testing
+
+- [OK] Final sweep: typecheck 0 errors; 173/173 vitest; six browser suites green in their rounds (smoke 21/21, stability 22/22, cluster 10/10, stage 12/12, adas 15/15, perf 14/14); golden baseline prefix 0.000e+0; working tree clean; 0 unpushed commits
+- [OK] Artifacts confirmed present: README.md + README.en.md + LICENSE + THIRD_PARTY_NOTICES.md, 7 spec files, 10 verification scripts, docs/demo with 5 screenshots and a 30 s recording, gh-pages containing only .nojekyll/assets/index.html
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Enable GitHub Pages in the repository settings (Source: gh-pages / root) to serve https://helongzhou.github.io/apex-cockpit/
+- Optional, recorded in the task archives: instanced environment geometry to bring the studio draw-call count under 80, and a real-hardware frame-time measurement for the 0.5 ms budget this environment cannot resolve
