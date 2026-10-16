@@ -180,6 +180,17 @@ export function createHighwayEnvironment(scene: THREE.Scene, world: RAPIER.World
         ROAD.friction
     );
     buildGuardrails(scene, world);
+    // End barriers: without them a straight 15 s drive leaves the road and falls into the void.
+    for (const end of [-1, 1]) {
+        addBox(
+            scene,
+            world,
+            { width: ROAD_WIDTH + 60, height: GUARDRAIL.height * 2, depth: GUARDRAIL.thickness },
+            { x: 0, y: GROUND_LEVEL + GUARDRAIL.height, z: end * (ROAD_LENGTH / 2 + GUARDRAIL.thickness) },
+            studioMaterial(GUARDRAIL.color, [0.2, 0.2, 0.2]),
+            0.05
+        );
+    }
 
     const markingMaterial = studioMaterial(MARKING.color, [0.1, 0.1, 0.1]);
     for (const offset of [-LANE_WIDTH / 2, LANE_WIDTH / 2]) {

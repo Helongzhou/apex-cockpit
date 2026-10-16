@@ -44,7 +44,8 @@ describe('speed gauge mapping', () => {
 
     it('clamps over-range speeds and treats reverse as magnitude', () => {
         expect(speedToFraction(999)).toBe(1);
-        expect(speedToFraction(-10)).toBeCloseTo(0.25, 9);
+        // Scale-independent: a quarter of full scale in reverse.
+        expect(speedToFraction(-GAUGE_MAX_KMH / 4)).toBeCloseTo(0.25, 9);
     });
 
     it('survives NaN and Infinity without producing NaN angles', () => {

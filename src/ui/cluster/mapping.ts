@@ -7,8 +7,12 @@
 
 import type { Gear, VehicleSnapshot } from '../../../game/types.js';
 
-/** Gauge scale. The demo's physical top speed is 36 km/h (80 world units/s at 8 units per metre). */
-export const GAUGE_MAX_KMH = 40;
+/**
+ * Gauge scale. Measured top speed is ~78 km/h on the studio stage and ~89 km/h on the highway
+ * (the motor target is an *angular* velocity, so the linear top speed is not the 80 world units/s
+ * figure from `CarControls`). 100 km/h gives the needle visible headroom on both stages.
+ */
+export const GAUGE_MAX_KMH = 100;
 /** Sweep of the needle: -120° (0 km/h) to +120° (full scale). */
 export const GAUGE_MIN_DEGREES = -120;
 export const GAUGE_MAX_DEGREES = 120;

@@ -431,7 +431,7 @@ DOM/CSS overlay，**不引入第二个渲染上下文**（页面仍只有 1 个 
 
 | 组件 | 内容 |
 |---|---|
-| `SpeedGauge` | 指针式车速表：0–40 km/h 刻度（demo 物理上限 36 km/h）、指针角度 = `speedToNeedleDegrees(kmh)`、附 m/s 副读数；静态表盘 `memo` 化 |
+| `SpeedGauge` | 指针式车速表：0–100 km/h 刻度（实测极速 ≈78 km/h 影棚 / 88.9 km/h 高速）、指针角度 = `speedToNeedleDegrees(kmh)`、附 m/s 副读数；静态表盘 `memo` 化 |
 | `GearIndicator` | P/R/N/D，高亮来自物理状态判定的挡位 |
 | `PowerBar` | 中零功率条，正=驱动 / 负=制动回收，`transform: scaleX()` 驱动 |
 | `AdasStatusIcons` | 只显示真实信号（碰撞告警 / 倒车 / 驻车 / 行驶中 / 计时中）；迭代 3 的 ADAS 图层接入后在此扩展 |
@@ -448,6 +448,21 @@ DOM/CSS overlay，**不引入第二个渲染上下文**（页面仍只有 1 个 
 ---
 
 ## 十四、迭代 3 交付说明（进行中）
+
+### 演示资产
+
+| 文件 | 内容 |
+|---|---|
+| [docs/demo/01-studio-cockpit.png](docs/demo/01-studio-cockpit.png) | 影棚座舱视角驾驶 |
+| [docs/demo/02-highway-adas-truth.png](docs/demo/02-highway-adas-truth.png) | 高速舞台 + ADAS 车道线与**真值**目标框 + 数字仪表 |
+| [docs/demo/03-highway-adas-perception.png](docs/demo/03-highway-adas-perception.png) | 同一场景切到**感知**输出（漏检 / 抖动 / 延迟 / 置信度） |
+| [docs/demo/04-perf-panel.png](docs/demo/04-perf-panel.png) | 性能面板（帧时间分位数、渲染计数、物理子步、包体基线） |
+| [docs/demo/05-cluster.png](docs/demo/05-cluster.png) | 数字仪表特写 |
+| [docs/demo/apex-cockpit-demo.webm](docs/demo/apex-cockpit-demo.webm) | ~30 s 录屏（影棚 → 高速 → 真值/感知 → 性能面板），781 KB |
+
+重新生成：`npm run build && node scripts/capture-demo.mjs dist`（录屏经 ffmpeg 压到 960×600/CRF 38）。
+
+
 
 ### 14.1 ADAS 可视化图层（已完成）
 
