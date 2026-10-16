@@ -98,3 +98,46 @@ Iteration 1 finished: four child tasks (C1 migration, C2 stability, C3 bundle bu
 
 - Iteration 2: VehicleState data layer and state bus, digital cluster, highway stage
 - Iteration 3: ADAS visualisation layers, perception noise model, performance panel, delivery
+
+
+## Session 3: Complete iteration 2: vehicle state layer, digital cluster and highway stage
+<!-- trellis-session: v=2 fp=f2453c28d60f7f6b -->
+
+**Date**: 2026-10-16
+**Task**: Complete iteration 2: vehicle state layer, digital cluster and highway stage
+**Branch**: `main`
+
+### Summary
+
+Iteration 2 finished: the demo now has a testable data layer, a frame-rate independent simulation, a digital cluster HMI and a second stage; all three child tasks archived
+
+### Main Changes
+
+- D1: VehicleState signals + a subscription state bus with swappable sources (live simulation or JSON replay), units.ts as the single unit-conversion entry point, and frame-rate.ts turning every per-frame constant into a time-based one
+- D1: the control loop now advances inside the physics substep, so 30/60/144 Hz runs are bit-identical (max |delta| = 0.0000); telemetry became a bus consumer with collision/box/race events
+- D1 fixed three upstream defects found on the way: steering exceeded its own limit by 0.84 degrees, the jump was level-triggered (14 impulses per 0.1 s at 144 Hz vs 3 at 30 Hz), and resets gave no visual feedback
+- D2: digital cluster (speed gauge, gear, centre-zero power bar, status icons, stage switcher) built from DOM/CSS only - one canvas on the page, transform-only updates, memoised static gauge face
+- D3: highway stage with a deterministic centreline, three lanes, guardrails, gantries and a kinematic lead vehicle as the ADAS target; the stage list is published by the game so the UI stays out of the game bundle
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `15981ea` | Add the vehicle state layer and the state bus |
+| `61493c2` | Make the control loop frame-rate independent |
+| `59895f2` | Drive the HMI from the state bus and fix the displayed units |
+| `ae77b37` | Add the digital cluster driven by the vehicle state |
+| `521a1f9` | Add the highway stage with a kinematic lead vehicle |
+
+### Testing
+
+- [OK] typecheck 0 errors; 125/125 vitest (vehicle-state/state-bus/units/frame-rate at 100% coverage); smoke 21/21; stability 22/22; cluster 10/10; stage 12/12
+- [OK] Golden baseline: studio physics unchanged (prefix 301 frames, 0.000e+0); 20 stage switches leave geometries/textures/programs/listeners at baseline
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- Iteration 3: ADAS visualisation layers (lane lines, target boxes, planned trajectory), perception noise narrative, performance panel, specs and delivery
