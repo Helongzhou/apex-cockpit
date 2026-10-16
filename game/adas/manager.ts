@@ -11,6 +11,7 @@ import { createLaneLines, type LaneLines } from './lanes.js';
 import { TargetPool, type AdasTarget } from './targets.js';
 import { laneCentreOffset, laneIndexOf, lateralOffset } from '../math/lane-geometry.js';
 import { ADAS_LAYER, isAdas } from './layers.js';
+import { DEFAULT_PERCEPTION, PerceptionModel } from './perception-noise.js';
 import type { HighwayPath } from '../math/highway-path.js';
 import type { Vec3 } from '../types.js';
 
@@ -33,6 +34,10 @@ export interface AdasStats {
     laneIndex: number;
     visible: boolean;
     mode: AdasMode;
+    /** Perception model counters (zero while in truth mode). */
+    perceived: number;
+    droppedTotal: number;
+    meanConfidence: number;
     /** Layer the overlays live on (documented in the panel and asserted by the checks). */
     layer: number;
     /** True when the lane group is on the ADAS layer *and nowhere else*. */
@@ -52,9 +57,12 @@ export class AdasVisualisation {
     private readonly path: HighwayPath;
     private readonly laneCount: number;
     private readonly laneWidth: number;
+    private readonly perception: PerceptionModel;
     private mode: AdasMode = 'off';
     private laneErrorMeters = 0;
     private currentLane = 0;
+    private perceivedCount = 0;
+    private meanConfidence = 0;
 
     constructor(scene: THREE.Scene, options: AdasOptions) {
         this.path = options.path;
@@ -62,6 +70,7 @@ export class AdasVisualisation {
         this.laneWidth = options.laneWidth;
         this.lanes = createLaneLines(options.path, options.laneCount, options.laneWidth);
         this.pool = new TargetPool(scene, options.targetCapacity);
+        this.perception = new PerceptionModel(DEFAULT_PERCEPTION, options.targetCapacity);
         scene.add(this.lanes.group);
         this.setMode('off');
     }
@@ -78,7 +87,7 @@ export class AdasVisualisation {
      * @param targets - ground-truth targets; in perception mode the caller (E2) has already
      *   downgraded them, so the manager renders whatever it is given.
      */
-    update(ego: EgoState, targets: readonly AdasTarget[]): void {
+    update(ego: EgoState, targets: readonly AdasTarget[], deltaSeconds: number): void {
         const distance = Math.min(Math.max(ego.position.z - -this.path.length / 2, 0), this.path.length);
         const centre = this.path.pointAt(distance);
         const heading = this.path.headingAt(distance);
@@ -87,12 +96,26 @@ export class AdasVisualisation {
 
         if (this.mode === 'off') {
             this.pool.update([]);
+            this.perceivedCount = 0;
+            this.meanConfidence = 0;
             return;
         }
-        this.pool.update(targets.map(target => ({
-            ...target,
-            source: this.mode === 'truth' ? 'truth' : target.source
-        })));
+        if (this.mode === 'truth') {
+            // Ground truth goes to the pool untouched: no copy, no allocation.
+            this.pool.update(targets);
+            this.perceivedCount = 0;
+            this.meanConfidence = 1;
+            return;
+        }
+        // Perception: drop-outs, jitter, heading error and latency, all deterministic.
+        const perceived = this.perception.perceive(targets, deltaSeconds);
+        this.pool.update(perceived.targets, perceived.count);
+        this.perceivedCount = perceived.count;
+        let confidence = 0;
+        for (let index = 0; index < perceived.count; index += 1) {
+            confidence += perceived.targets[index].confidence;
+        }
+        this.meanConfidence = perceived.count === 0 ? 0 : confidence / perceived.count;
     }
 
     /** Lane centre lateral offset for a lane index, used by the tests and the panel. */
@@ -109,6 +132,9 @@ export class AdasVisualisation {
             laneIndex: this.currentLane,
             visible: this.mode !== 'off',
             mode: this.mode,
+            perceived: this.perceivedCount,
+            droppedTotal: this.perception.droppedTotal(),
+            meanConfidence: this.meanConfidence,
             layer: ADAS_LAYER,
             // Layer 0 is what the reflection probe and the default camera render: being off it is
             // exactly the isolation requirement (AC-E1.2).

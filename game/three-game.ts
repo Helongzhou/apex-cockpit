@@ -73,7 +73,7 @@ declare global {
             /** Application-side stage-switch cost (session rebuild), excluding the first frame. */
             lastSwitchMs: number;
             /** ADAS overlay counters, null on stages without an ADAS feed. */
-            adas: { lanes: number; targets: number; capacity: number; laneErrorMeters: number; laneIndex: number; visible: boolean; mode: string; layer: number; layerIsolated: boolean } | null;
+            adas: { lanes: number; targets: number; capacity: number; laneErrorMeters: number; laneIndex: number; visible: boolean; mode: string; perceived: number; droppedTotal: number; meanConfidence: number; layer: number; layerIsolated: boolean } | null;
         };
     }
 }

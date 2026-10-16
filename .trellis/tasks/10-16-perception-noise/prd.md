@@ -1,19 +1,53 @@
-# E2 · perception-noise
+# E2 · 感知噪声叙事
+
+> 父任务：`.trellis/tasks/10-16-iteration-3-adas` ｜ P0 ｜ 前置：E1（ADAS 图层）
 
 ## Goal
 
-Perception narrative: a deterministic noise model that downgrades ground truth into perception output (missed detections, box jitter, heading error, latency), plus the truth/perception toggle and tests pinning the model's statistics.
+把"真值"降级为"感知输出"，让 UI 上能一键在两者间切换 —— 这是岗位要的**同一份数据、两种真实性**的叙事。模型必须**确定性可复现**（用固定种子的 PRNG，不用 `Math.random`），否则回归与演示都不可信。
 
 ## Requirements
 
-- TBD
+| # | 需求 | 说明 |
+|---|---|---|
+| R1 | `game/adas/perception-noise.ts`（纯模块） | 确定性 PRNG（mulberry32）+ 感知模型：**漏检**、位置抖动（米）、**航向误差**（度）、**时间延迟**（秒，环形历史缓冲实现）、置信度区间 |
+| R2 | 零分配 | 历史缓冲、输出目标对象全部预分配；`perceive()` 调用期不新建对象 |
+| R3 | 帧率无关的延迟 | 延迟按**秒**计（时间戳历史），不是按帧数 |
+| R4 | 集成 | `AdasVisualisation` 在 `perception` 模式下把真值过一遍模型；`off`/`truth` 不启用 |
+| R5 | 可观测 | 感知统计（本帧目标数、平均置信度、累计漏检数）进入 `__APEX_STATS().adas`，供检查脚本与 E3 性能面板读取 |
 
 ## Acceptance Criteria
 
-- [ ] TBD
+| 项 | 判据 | 验证方式 |
+|---|---|---|
+| AC-E2.1 | 确定性：同种子 + 同输入序列 → 输出**逐字段一致** | 单测（两次独立构造的模型跑同一序列） |
+| AC-E2.2 | 统计正确：漏检比例 ≈ 配置概率（容差内）、抖动与航向误差不超配置上限、置信度在区间内 | 单测（大样本） |
+| AC-E2.3 | 延迟按秒：输出的位置对应 `latencySeconds` 之前的真值 | 单测（构造已知轨迹） |
+| AC-E2.4 | 零分配：`perceive()` 反复调用后对象身份不变 | 单测 |
+| AC-E2.5 | 运行时：高速 + 感知模式下目标数与置信度可见，切换回真值后置信度回到 1 | `scripts/adas-check.mjs` 扩展 |
+| AC-E2.6 | 回归 | 金标准 / smoke / cluster / stage / stability 不回退 |
 
-## Notes
+## 门禁
 
-- Keep `prd.md` focused on requirements, constraints, and acceptance criteria.
-- Lightweight tasks can remain PRD-only.
-- For complex tasks, add `design.md` for technical design and `implement.md` for execution planning before `task.py start`.
+- G1：typecheck 0、test 全绿（新增 ≥12 例）。
+- G2：build + 既有 5 套浏览器检查不回退。
+- G3：金标准 `--compare` 0 差异。
+- G4：实测写入本文件；README §14.2 增补。
+
+## 实测记录（执行时填写）
+
+| 项 | 值 |
+|---|---|
+| 确定性验证 | **两个独立构造的同种子模型，喂同一序列 40 帧，输出逐字段完全相等**（单测 `toEqual`）。PRNG 为 mulberry32，模块内不使用 `Math.random`、不读墙钟 |
+| 漏检率 | 配置 30%，**2000 样本实测偏差在 ±5% 以内**；`droppedTotal()` 与实际漏检数逐一吻合 |
+| 抖动 / 航向误差 / 置信度 | 抖动 ≤ 配置 5 world units（300 帧逐帧断言）；航向误差 ≤ 0.05 rad；置信度落在 [0.2, 0.6] 区间内 |
+| 延迟实现与实测 | 按**秒**（时间戳环形历史，非帧数）。已知轨迹（100 units/s）在 t=2 s 时输出 **175 units**（= 2 s − 0.25 s）实测落在 170–180 区间；延迟窗口内**不输出任何目标**（避免"假装有数据"） |
+| 零分配 | 历史环（24 帧 × 容量）与输出对象全部预分配；单测断言反复调用后输出对象**身份不变** |
+| 运行时（`npm run adas` 15/15） | 感知模式 1 个目标、**平均置信度 0.74**；切回真值置信度 **1.0**；漏检计数可读 |
+| 新增用例与回归 | 142 → **155**（新增 13）；smoke 21/21、cluster 10/10、stage 12/12、stability 22/22、金标准影棚前缀 301 帧 **0.000e+0** |
+
+### 本轮修掉的问题
+
+1. **字段与方法重名**：`droppedTotal` 同时作为私有字段与方法（TS 报重复标识符），改为 `droppedCount` 字段 + `droppedTotal()` 方法。
+2. **延迟判定被浮点累加击穿**：`sum(120) − sum(105)` 不保证恰好等于 `sum(15)`，`>= 0.25` 会偶发不成立导致该帧被丢弃。加 `1e-9` epsilon 并把历史环从 16 帧加大到 24 帧（覆盖 0.4 s@60Hz / 0.8 s@30Hz）。
+3. **检查脚本忽略了延迟语义**：切换感知后立刻断言"有目标"必然失败（传感器延迟期内本就无输出）。改为条件等待首个被感知目标，这也让用例本身验证了"延迟窗口内不输出"这一行为。

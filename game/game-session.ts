@@ -126,7 +126,7 @@ export class GameSession {
         this.car.syncMeshes();
         this.environment.syncMeshes();
         this.followCamera.update(deltaSeconds);
-        this.updateAdas();
+        this.updateAdas(deltaSeconds);
         this.publishVehicleState(deltaSeconds);
         this.reflectionProbe.update(this.renderer, this.scene);
     }
@@ -151,7 +151,7 @@ export class GameSession {
     }
 
     /** Applies the UI's ADAS mode and refreshes the overlays from the stage's ground truth. */
-    updateAdas(): void {
+    updateAdas(deltaSeconds: number): void {
         if (this.adas === null) {
             return;
         }
@@ -162,7 +162,8 @@ export class GameSession {
         const position = this.car.position;
         this.adas.update(
             { position: { x: position.x, y: position.y, z: position.z }, heading: this.car.yaw() },
-            this.environment.adas?.targets() ?? []
+            this.environment.adas?.targets() ?? [],
+            deltaSeconds
         );
     }
 

@@ -81,8 +81,9 @@ export class TargetPool {
         boxTemplate.dispose(); // the per-slot clones own their buffers from here on
     }
 
-    update(targets: readonly AdasTarget[]): void {
-        const count = Math.min(targets.length, this.slots.length);
+    /** `limit` lets callers pass a reusable buffer plus a valid count (no slice, no map). */
+    update(targets: readonly AdasTarget[], limit = targets.length): void {
+        const count = Math.min(limit, targets.length, this.slots.length);
         for (let index = 0; index < count; index += 1) {
             const target = targets[index];
             const slot = this.slots[index];

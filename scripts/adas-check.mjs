@@ -93,8 +93,14 @@ const off = await adas();
 check('AC-E1.1 turning the overlays off clears the targets', off?.mode === 'off' && off?.targets === 0 && off?.visible === false,
     `mode ${off?.mode}, targets ${off?.targets}`);
 
-// Driving still works with the overlays on.
+// Driving still works with the overlays on. The perception model needs one latency window
+// (0.25 s of simulated updates) before it can emit anything, so wait for that condition.
 await page.locator('.adas-button', { hasText: '感知' }).click();
+await page.waitForFunction(
+    () => (window.__APEX_STATS?.().adas?.perceived ?? 0) >= 1,
+    undefined,
+    { timeout: 60_000 }
+).catch(() => undefined);
 await page.keyboard.down('w');
 const drives = await page.waitForFunction(
     () => parseFloat(document.querySelector('.cluster-speed-value')?.textContent ?? '0') > 0,
@@ -106,6 +112,18 @@ check('AC-E1.5 the car drives with the overlays on', drives);
 const perceiving = await adas();
 check('AC-E1.1 perception mode keeps rendering targets', perceiving?.mode === 'perception' && (perceiving?.targets ?? 0) >= 1,
     `mode ${perceiving?.mode}, targets ${perceiving?.targets}`);
+
+// E2: the perception model must report confidence below 1 and may drop the target entirely,
+// while truth mode always reports exactly one target with full confidence.
+check('AC-E2.5 perception reports a confidence below 1', (perceiving?.meanConfidence ?? 1) < 1,
+    `mean confidence ${perceiving?.meanConfidence?.toFixed(2)}`);
+await page.locator('.adas-button', { hasText: '真值' }).click();
+await page.waitForTimeout(1500);
+const truthAgain = await adas();
+check('AC-E2.5 truth mode reports full confidence again', truthAgain?.mode === 'truth' && truthAgain?.meanConfidence === 1,
+    `mode ${truthAgain?.mode}, confidence ${truthAgain?.meanConfidence}`);
+check('AC-E2.5 the model tracks dropped detections', (truthAgain?.droppedTotal ?? -1) >= 0,
+    `${truthAgain?.droppedTotal} dropped so far`);
 check('AC-E1.5 no page errors', errors.length === 0, errors.slice(0, 2).join(' | '));
 
 await browser.close();
